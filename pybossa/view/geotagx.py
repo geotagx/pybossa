@@ -83,3 +83,5 @@ def render_survey():
 			survey_type = "NONE"
 
 		return render_template('/geotagx/surveys/surveys.html', survey_type = survey_type, GEOTAGX_FINAL_SURVEY_TASK_REQUIREMENTS = current_app.config['GEOTAGX_FINAL_SURVEY_TASK_REQUIREMENTS'])
+	else:
+		return redirect(url_for('home.home'))
