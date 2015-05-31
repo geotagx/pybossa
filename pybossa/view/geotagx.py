@@ -217,3 +217,26 @@ def users_page(page):
     return render_template('geotagx/users/index.html', accounts = accounts,
                            total = count, pagination_page = str(page),
                            title = "Community", pagination = pagination)
+
+
+@blueprint.route('/project/<project_short_name>/flush_task_runs')
+def flush_task_runs(project_short_name):
+	project = cached_projects.get_project(project_short_name)
+	if current_user.admin or project.owner_id == current_user.id:
+		associated_task_runs = TaskRun.query.filter_by(project_id=project.id).all()
+		for task_run in associated_task_runs:
+			db.session.delete(task_run)
+			pass
+		db.session.commit()
+
+		# Reset project data in the cache
+		cached_projects.delete_project(project_short_name)
+		# Note: The cache will hold the old data about the users who contributed
+		# to the tasks associated with this projects till the User Cache Timeout.
+		# Querying the list of contributors to this project, and then individually updating
+		# their cache after that will be a very expensive query, hence we will avoid that
+		# for the time being.
+		flash('All Task Runs associated with this project have been successfully deleted.', 'success')
+		return redirect(url_for('project.task_settings', short_name=project_short_name))
+	else:
+		abort(404)
