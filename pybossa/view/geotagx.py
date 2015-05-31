@@ -20,11 +20,13 @@ from flask import Blueprint, request, url_for, flash, redirect, session, \
 	current_app, render_template, abort, request
 from pybossa.model.user import User
 from pybossa.model.task_run import TaskRun
+from pybossa.model.task import Task
 from pybossa.model.project import Project
 from pybossa.util import Pagination, pretty_date
 from pybossa.core import db
 from pybossa.cache import users as cached_users
 from pybossa.cache import projects as cached_projects
+from pybossa.view import projects as projects_view
 from flask_oauthlib.client import OAuthException
 from flask.ext.login import login_required, login_user, logout_user, current_user
 from flask import jsonify
@@ -219,24 +221,49 @@ def users_page(page):
                            title = "Community", pagination = pagination)
 
 
-@blueprint.route('/project/<project_short_name>/flush_task_runs')
-def flush_task_runs(project_short_name):
+@blueprint.route('/project/<project_short_name>/flush_task_runs', defaults={'confirmed':'unconfirmed'})
+@blueprint.route('/project/<project_short_name>/flush_task_runs/<confirmed>')
+def flush_task_runs(project_short_name, confirmed):
 	project = cached_projects.get_project(project_short_name)
 	if current_user.admin or project.owner_id == current_user.id:
-		associated_task_runs = TaskRun.query.filter_by(project_id=project.id).all()
-		for task_run in associated_task_runs:
-			db.session.delete(task_run)
-			pass
-		db.session.commit()
+		if confirmed == "confirmed":
+			associated_task_runs = TaskRun.query.filter_by(project_id=project.id).all()
+			for task_run in associated_task_runs:
+				db.session.delete(task_run)
+				pass
+			db.session.commit()
 
-		# Reset project data in the cache
-		cached_projects.delete_project(project_short_name)
-		# Note: The cache will hold the old data about the users who contributed
-		# to the tasks associated with this projects till the User Cache Timeout.
-		# Querying the list of contributors to this project, and then individually updating
-		# their cache after that will be a very expensive query, hence we will avoid that
-		# for the time being.
-		flash('All Task Runs associated with this project have been successfully deleted.', 'success')
-		return redirect(url_for('project.task_settings', short_name=project_short_name))
+			# Iterate over all tasks associated with the project, and mark them as 'ongoing'
+			# Some tasks might be marked as 'completed' if enough task_runs were done
+			associated_tasks = Task.query.filter_by(project_id=project.id).all()
+			for task in associated_tasks:
+				if task.state != u"ongoing":
+					task.state = u"ongoing"
+					db.session.commit()
+
+			# Reset project data in the cache
+			cached_projects.clean_project(project.id)
+			# Note: The cache will hold the old data about the users who contributed
+			# to the tasks associated with this projects till the User Cache Timeout.
+			# Querying the list of contributors to this project, and then individually updating
+			# their cache after that will be a very expensive query, hence we will avoid that
+			# for the time being.
+			flash('All Task Runs associated with this project have been successfully deleted.', 'success')
+			return redirect(url_for('project.task_settings', short_name = project_short_name))
+		elif confirmed == "unconfirmed":
+			# Obtain data required by the project profile renderer
+		    (project, owner, n_tasks, n_task_runs,
+		     overall_progress, last_activity) = projects_view.project_by_shortname(project_short_name)
+		    return render_template('geotagx/projects/delete_task_run_confirmation.html',
+		                           project=project,
+		                           owner=owner,
+		                           n_tasks=n_tasks,
+		                           n_task_runs=n_task_runs,
+		                           overall_progress=overall_progress,
+		                           last_activity=last_activity,
+		                           n_completed_tasks=cached_projects.n_completed_tasks(project.id),
+		                           n_volunteers=cached_projects.n_volunteers(project.id))
+		else:
+			abort(404)
 	else:
 		abort(404)
