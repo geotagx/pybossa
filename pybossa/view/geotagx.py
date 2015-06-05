@@ -23,13 +23,15 @@ from pybossa.model.task_run import TaskRun
 from pybossa.model.task import Task
 from pybossa.model.project import Project
 from pybossa.util import Pagination, pretty_date
-from pybossa.core import db
+from pybossa.auth import ensure_authorized_to
+from pybossa.core import db, task_repo
 from pybossa.cache import users as cached_users
 from pybossa.cache import projects as cached_projects
 from pybossa.view import projects as projects_view
 from flask_oauthlib.client import OAuthException
 from flask.ext.login import login_required, login_user, logout_user, current_user
 from flask import jsonify
+import json
 
 blueprint = Blueprint('geotagx', __name__)
 
@@ -267,3 +269,41 @@ def flush_task_runs(project_short_name, confirmed):
 			abort(404)
 	else:
 		abort(404)
+
+@blueprint.route('/visualize/<short_name>/<int:task_id>')
+def visualize(short_name, task_id):
+  """Return a file with all the TaskRuns for a given Task"""
+  # Check if it a supported geotagx project whose schema we know
+  if 'GEOTAGX_SUPPORTED_PROJECTS_SCHEMA' in current_app.config.keys() \
+		and short_name in current_app.config['GEOTAGX_SUPPORTED_PROJECTS_SCHEMA'].keys():
+	  # Check if the project exists
+	  (project, owner, n_tasks, n_task_runs,
+	   overall_progress, last_activity) = projects_view.project_by_shortname(short_name)
+
+	  ensure_authorized_to('read', project)
+	  redirect_to_password = projects_view._check_if_redirect_to_password(project)
+	  if redirect_to_password:
+	      return redirect_to_password
+
+	  # Check if the task belongs to the project and exists
+	  task = task_repo.get_task_by(project_id=project.id, id=task_id)
+	  if task:
+	      taskruns = task_repo.filter_task_runs_by(task_id=task_id, project_id=project.id)
+	      results = [tr.dictize() for tr in taskruns]
+	      return render_template('geotagx/projects/task_runs_visualize.html',
+			                           project=project,
+			                           owner=owner,
+			                           n_tasks=n_tasks,
+			                           n_task_runs=n_task_runs,
+			                           overall_progress=overall_progress,
+			                           last_activity=last_activity,
+			                           n_completed_tasks=cached_projects.n_completed_tasks(project.id),
+			                           n_volunteers=cached_projects.n_volunteers(project.id),
+			                           task_info = task.info,
+			                           task_runs_json = results,
+			                           geotagx_project_template_schema = \
+			                           	current_app.config['GEOTAGX_SUPPORTED_PROJECTS_SCHEMA'][short_name])
+	  else:
+	      return abort(404)
+  else:
+  	return abort(404)
