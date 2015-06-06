@@ -17,20 +17,22 @@
 # along with PyBossa.  If not, see <http://www.gnu.org/licenses/>.
 """ Custom Geotagx functionalities for Pybossa"""
 from flask import Blueprint, request, url_for, flash, redirect, session, \
-	current_app, render_template, abort, request
+  current_app, render_template, abort, request
 from pybossa.model.user import User
 from pybossa.model.task_run import TaskRun
 from pybossa.model.task import Task
 from pybossa.model.project import Project
-from pybossa.util import Pagination, pretty_date
+from pybossa.util import Pagination, pretty_date, admin_required, UnicodeWriter
 from pybossa.auth import ensure_authorized_to
-from pybossa.core import db, task_repo
+from pybossa.core import db, task_repo, user_repo
 from pybossa.cache import users as cached_users
 from pybossa.cache import projects as cached_projects
 from pybossa.view import projects as projects_view
 from flask_oauthlib.client import OAuthException
 from flask.ext.login import login_required, login_user, logout_user, current_user
-from flask import jsonify
+from pybossa.util import admin_required, UnicodeWriter
+from flask import jsonify, Response
+from StringIO import StringIO
 import json
 
 blueprint = Blueprint('geotagx', __name__)
@@ -307,3 +309,70 @@ def visualize(short_name, task_id):
 	      return abort(404)
   else:
   	return abort(404)
+
+@blueprint.route('/users/export')
+@login_required
+@admin_required
+def export_users():
+    """Export Users list in the given format, only for admins."""
+    exportable_attributes = ('id', 'name', 'fullname', 'email_addr',
+                             'created', 'locale', 'admin')
+
+    def respond_json():
+        tmp = 'attachment; filename=all_users.json'
+        res = Response(gen_json(), mimetype='application/json')
+        res.headers['Content-Disposition'] = tmp
+        return res
+
+    def gen_json():
+        users = user_repo.get_all()
+        json_users = []
+        for user in users:
+          json_datum = dictize_with_exportable_attributes(user)
+          if 'geotagx_survey_status' in user.info.keys():
+            json_datum['geotagx_survey_status'] = user.info['geotagx_survey_status']
+          else:
+            json_datum['geotagx_survey_status'] = "RESPONSE_NOT_TAKEN"
+          json_users.append(json_datum)
+        return json.dumps(json_users)
+
+    def dictize_with_exportable_attributes(user):
+        dict_user = {}
+        for attr in exportable_attributes:
+            dict_user[attr] = getattr(user, attr)
+        return dict_user
+
+    def respond_csv():
+        out = StringIO()
+        writer = UnicodeWriter(out)
+        tmp = 'attachment; filename=all_users.csv'
+        res = Response(gen_csv(out, writer, write_user), mimetype='text/csv')
+        res.headers['Content-Disposition'] = tmp
+        return res
+
+    def gen_csv(out, writer, write_user):
+        add_headers(writer)
+        for user in user_repo.get_all():
+            write_user(writer, user)
+        yield out.getvalue()
+
+    def write_user(writer, user):
+        values = [getattr(user, attr) for attr in sorted(exportable_attributes)]
+        if 'geotagx_survey_status' in user.info.keys():
+          values.append(user.info['geotagx_survey_status'])
+        else:
+          values.append('RESPONSE_NOT_TAKEN') 
+        writer.writerow(values)
+
+    def add_headers(writer):
+        writer.writerow(sorted(exportable_attributes) + ['geotagx_survey_status'])
+
+    export_formats = ["json", "csv"]
+
+    fmt = request.args.get('format')
+    if not fmt:
+        return redirect(url_for('.index'))
+    if fmt not in export_formats:
+        abort(415)
+    return {"json": respond_json, "csv": respond_csv}[fmt]()
+
