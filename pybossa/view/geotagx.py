@@ -376,3 +376,11 @@ def export_users():
         abort(415)
     return {"json": respond_json, "csv": respond_csv}[fmt]()
 
+
+@blueprint.route('/feedback')
+def feedback():
+	"""
+	Moves Geotag-X feedback to a separate page within Geotag-X instead of
+	forcing the user out of the site onto the external limesurvey page.
+	"""
+	return render_template('geotagx/feedback/feedback.html')
