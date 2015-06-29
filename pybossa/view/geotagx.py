@@ -28,14 +28,20 @@ from pybossa.core import db, task_repo, user_repo
 from pybossa.cache import users as cached_users
 from pybossa.cache import projects as cached_projects
 from pybossa.view import projects as projects_view
+from pybossa.exporter.json_export import JsonExporter
 from flask_oauthlib.client import OAuthException
 from flask.ext.login import login_required, login_user, logout_user, current_user
 from pybossa.util import admin_required, UnicodeWriter
 from flask import jsonify, Response
 from StringIO import StringIO
 import json
+import pandas as pd
+import numpy as np
+import re
 
 blueprint = Blueprint('geotagx', __name__)
+geotagx_json_exporter = JsonExporter()
+
 
 def setup_geotagx_config_default_params():
 	""" Sets up default values for geotagx specific config params """
@@ -309,6 +315,127 @@ def visualize(short_name, task_id):
 	      return abort(404)
   else:
   	return abort(404)
+
+@blueprint.route('/export/category/<category_name>/GeoJSON')
+def export_category_results_as_geoJSON(category_name):
+	max_number_of_exportable_projects = 15
+	projects_in_category = cached_projects.get(category_name, page=1, per_page=max_number_of_exportable_projects)
+	task_runs = []
+	task_runs_info = []
+	project_name_id_mapping = {}
+	project_id_name_mapping = {}
+
+	project_question_type_mapping = {}
+	project_question_question_text_mapping = {}
+
+	for project in projects_in_category:
+		short_name = project['short_name']
+
+		project_id_name_mapping[project['id']] = project['short_name']
+		project_name_id_mapping[project['short_name']] = project['id']
+
+		# Check if it a supported geotagx project whose schema we know
+		if 'GEOTAGX_SUPPORTED_PROJECTS_SCHEMA' in current_app.config.keys() \
+			and short_name in current_app.config['GEOTAGX_SUPPORTED_PROJECTS_SCHEMA'].keys():
+
+			##Read the project schema and store the respective questions and their types
+			for _question in current_app.config['GEOTAGX_SUPPORTED_PROJECTS_SCHEMA'][short_name]['questions']:
+				project_question_type_mapping[unicode(short_name+"::"+_question['answer']['saved_as'])] = _question['type']
+				project_question_question_text_mapping[unicode(short_name+"::"+_question['answer']['saved_as']+"::question_text")] = _question['title']
+
+			#Only export results of known GEOTAGX projects that are created with `geotagx-project-template`
+			task_runs_generator = geotagx_json_exporter._gen_json("task_run", project['id'])
+			_task_runs = ""
+			for task_run_c in task_runs_generator:
+				_task_runs += task_run_c
+
+			task_runs = task_runs + json.loads(_task_runs)
+
+	def extract_geotagx_info(json):
+		"""Returns a list of only info objects of the task_run"""
+		exploded_json = []
+		for item in json:
+			item['info']['project_id'] = item['project_id']
+			exploded_json.append(item['info'])
+		return exploded_json
+
+	def _summarize_geolocations(geolocation_responses):
+		"""
+			TODO :: Add different geo-summarization methods (ConvexHull, Centroid, etc)
+		"""
+		responses = []
+
+		for response in geolocation_responses:
+			if type(response) == type([]):
+				for _response in response:
+					responses.append(_response)
+			elif type(response) == unicode or type(response) == str:
+				lat_lng_matches = re.findall("(\d+\.\d+)\s*,\s*(\d+\.\d+)", response)
+				if len(lat_lng_matches)>0:
+					responses.append(lat_lng_matches)
+		return responses
+
+	def _build_geo_json(geolocation_responses):
+		geoJSON = {}
+		geoJSON['type'] = "FeatureCollection"
+		geoJSON['features'] = []
+		for response in geolocation_responses:
+			if response['_geotagx_geolocation_key']:
+				geo_summary = response[response['_geotagx_geolocation_key']]
+				_feature = {}
+				_feature['type'] = "Feature"
+				_feature['geometry'] ={}
+				if len(geo_summary['geo_summary']) == 1:
+					_feature['geometry']['type'] = "Point"
+				elif len(geo_summary['geo_summary']) == 2:
+					_feature['geometry']['type'] = "LineString"
+				elif len(geo_summary['geo_summary']) >= 3:
+					_feature['geometry']['type'] = "Polygon"
+
+				_feature['geometry']['coordinates'] = geo_summary['geo_summary']
+				del response[response['_geotagx_geolocation_key']]
+				del response['_geotagx_geolocation_key']
+				_feature['properties'] = response
+				geoJSON['features'].append(_feature)
+
+		return geoJSON
+
+	task_runs_info = extract_geotagx_info(task_runs)
+	task_runs_info = pd.read_json(json.dumps(task_runs_info))
+
+	summary_dict = {}
+	for img_url in task_runs_info['img'].unique():
+		per_url_data = task_runs_info[task_runs_info['img'] == img_url]
+
+		for project_id in np.unique(per_url_data['project_id'].values):
+
+			per_summary_dict = {}
+			per_summary_dict['_geotagx_geolocation_key'] = False
+
+			if img_url in summary_dict.keys():
+				per_summary_dict = summary_dict[img_url]
+
+			per_summary_dict['GEOTAGX_IMAGE_URL'] = img_url
+			per_url_data_project_slice = per_url_data[per_url_data['project_id'] == project_id]
+
+			for key in per_url_data_project_slice.keys():
+				namespaced_key = project_id_name_mapping[project_id]+"::"+key
+				if key not in ['img', 'isMigrated', 'son_app_id', 'task_id', 'project_id']:
+					if namespaced_key in project_question_type_mapping.keys():
+						if project_question_type_mapping[namespaced_key] == u"geotagging":
+							per_summary_dict['_geotagx_geolocation_key'] = namespaced_key
+							per_summary_dict[namespaced_key] = {'geo_summary' : _summarize_geolocations(per_url_data_project_slice[key].values)}
+						else:
+							per_summary_dict[namespaced_key] = {'answer_summary':dict(per_url_data_project_slice[key].value_counts())}
+						per_summary_dict[namespaced_key]['question_text'] = project_question_question_text_mapping[unicode(namespaced_key+"::question_text")]
+
+				elif key == u"img":
+					per_summary_dict[project_id_name_mapping[project_id]+"::GEOTAGX_TOTAL"] = len(per_url_data_project_slice)
+
+			summary_dict[img_url] = per_summary_dict
+
+	geo_json = _build_geo_json(summary_dict.values())
+	return jsonify(geo_json)
 
 @blueprint.route('/users/export')
 @login_required
