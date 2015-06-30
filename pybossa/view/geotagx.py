@@ -367,15 +367,8 @@ def export_category_results_as_geoJSON(category_name):
 
 		for response in geolocation_responses:
 			if type(response) == type([]):
-				for _response in response:
-					responses.append(_response)
-			elif type(response) == unicode or type(response) == str:
-				lat_lng_matches = re.findall("(\d+\.\d+)\s*,\s*(\d+\.\d+)", response)
-				if len(lat_lng_matches)>0:
-					lat_lng = []
-					lat_lng.append(float(lat_lng_matches[0][0]))
-					lat_lng.append(float(lat_lng_matches[0][1]))
-					responses.append(lat_lng)
+				responses.append(response)
+
 		return responses
 
 	def _build_geo_json(geolocation_responses):
@@ -387,19 +380,17 @@ def export_category_results_as_geoJSON(category_name):
 				geo_summary = response[response['_geotagx_geolocation_key']]
 				_feature = {}
 				_feature['type'] = "Feature"
-				_feature['geometry'] ={}
-				if len(geo_summary['geo_summary']) == 1:
-					_feature['geometry']['type'] = "Point"
-				elif len(geo_summary['geo_summary']) == 2:
-					_feature['geometry']['type'] = "LineString"
-				elif len(geo_summary['geo_summary']) >= 3:
-					_feature['geometry']['type'] = "Polygon"
+				_feature['geometry'] = {}
 
-				_feature['geometry']['coordinates'] = geo_summary['geo_summary']
+				_feature['geometry']['type'] = "MultiPolygon"
+				_feature['geometry']['coordinates'] = [[geo_summary['geo_summary']]]
+
 				del response[response['_geotagx_geolocation_key']]
 				del response['_geotagx_geolocation_key']
 				_feature['properties'] = response
-				if len(_feature['geometry']['coordinates'])>0:
+
+				#Neglect responses with no coordinate labels
+				if _feature['geometry']['coordinates'] != [[[]]]:
 					geoJSON['features'].append(_feature)
 
 		return geoJSON
