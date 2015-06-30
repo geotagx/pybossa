@@ -372,7 +372,10 @@ def export_category_results_as_geoJSON(category_name):
 			elif type(response) == unicode or type(response) == str:
 				lat_lng_matches = re.findall("(\d+\.\d+)\s*,\s*(\d+\.\d+)", response)
 				if len(lat_lng_matches)>0:
-					responses.append(lat_lng_matches)
+					lat_lng = []
+					lat_lng.append(float(lat_lng_matches[0][0]))
+					lat_lng.append(float(lat_lng_matches[0][1]))
+					responses.append(lat_lng)
 		return responses
 
 	def _build_geo_json(geolocation_responses):
@@ -396,7 +399,8 @@ def export_category_results_as_geoJSON(category_name):
 				del response[response['_geotagx_geolocation_key']]
 				del response['_geotagx_geolocation_key']
 				_feature['properties'] = response
-				geoJSON['features'].append(_feature)
+				if len(_feature['geometry']['coordinates'])>0:
+					geoJSON['features'].append(_feature)
 
 		return geoJSON
 
