@@ -383,14 +383,14 @@ def export_category_results_as_geoJSON(category_name):
 				_feature['geometry'] = {}
 
 				_feature['geometry']['type'] = "MultiPolygon"
-				_feature['geometry']['coordinates'] = [[geo_summary['geo_summary']]]
+				_feature['geometry']['coordinates'] = [geo_summary['geo_summary']]
 
 				del response[response['_geotagx_geolocation_key']]
 				del response['_geotagx_geolocation_key']
 				_feature['properties'] = response
 
 				#Neglect responses with no coordinate labels
-				if _feature['geometry']['coordinates'] != [[[]]]:
+				if _feature['geometry']['coordinates'] != [[]]:
 					geoJSON['features'].append(_feature)
 
 		return geoJSON
