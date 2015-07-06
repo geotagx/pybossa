@@ -24,7 +24,7 @@ from pybossa.model.task import Task
 from pybossa.model.project import Project
 from pybossa.util import Pagination, pretty_date, admin_required, UnicodeWriter
 from pybossa.auth import ensure_authorized_to
-from pybossa.core import db, task_repo, user_repo
+from pybossa.core import db, task_repo, user_repo, sentinel
 from pybossa.cache import users as cached_users
 from pybossa.cache import projects as cached_projects
 from pybossa.view import projects as projects_view
@@ -38,6 +38,7 @@ import json
 import pandas as pd
 import numpy as np
 import re
+import datetime
 
 blueprint = Blueprint('geotagx', __name__)
 geotagx_json_exporter = JsonExporter()
@@ -498,6 +499,27 @@ def export_users():
         abort(415)
     return {"json": respond_json, "csv": respond_csv}[fmt]()
 
+"""
+	Basic implementation of the geotagx-sourcerer-proxy which ingests images from multiple sources
+"""
+@blueprint.route('/sourcerer-proxy', methods = ['GET', 'POST'])
+def sourcerer_proxy():
+	data = request.args.get('sourcerer-data')
+	try:
+		data = str(datetime.datetime.utcnow())+"%%%%"+data
+		sentinel.slave.lpush("GEOTAGX-SOURCERER-QUEUE", data);
+
+		response = {}
+		response['state'] = "SUCCESS"
+		response['data'] = data
+		return jsonify(response)
+
+	except Exception as e:
+
+		response = {}
+		response['state'] = "ERROR"
+		response['message'] = str(e)
+		return jsonify(response)
 
 @blueprint.route('/feedback')
 def feedback():
