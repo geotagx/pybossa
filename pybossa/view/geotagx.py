@@ -22,6 +22,7 @@ from pybossa.model.user import User
 from pybossa.model.task_run import TaskRun
 from pybossa.model.task import Task
 from pybossa.model.project import Project
+from pybossa.model.blogpost import Blogpost
 from pybossa.util import Pagination, pretty_date, admin_required, UnicodeWriter
 from pybossa.auth import ensure_authorized_to
 from pybossa.core import db, task_repo, user_repo, sentinel
@@ -520,6 +521,18 @@ def sourcerer_proxy():
 		response['state'] = "ERROR"
 		response['message'] = str(e)
 		return jsonify(response)
+
+"""
+	Endpoint to retrieve list of latest blog posts
+"""
+@blueprint.route('/blogs')
+def blogs():
+	"""
+	Show all blog posts for now
+	TODO : this should show only a slice of all the blogposts with pagination
+	"""
+	blogposts = Blogpost.query.all()
+	return render_template('geotagx/blogs/blogs.html', blogposts = blogposts)
 
 @blueprint.route('/feedback')
 def feedback():
