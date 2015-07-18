@@ -40,6 +40,7 @@ import pandas as pd
 import numpy as np
 import re
 import datetime
+import math
 
 blueprint = Blueprint('geotagx', __name__)
 geotagx_json_exporter = JsonExporter()
@@ -373,6 +374,47 @@ def export_category_results_as_geoJSON(category_name):
 
 		return responses
 
+	"""
+		Changes projection to WGS84 projection  from WebMercator projection
+		so that most geojson renderers support it out of the box
+		Inspired by : http://www.gal-systems.com/2011/07/convert-coordinates-between-web.html
+	"""
+	def _project_coordinate_from_webmercator_toWGS84(coordinates):
+		mercatorX_lon = coordinates[0]
+		mercatorY_lat = coordinates[1]
+
+		if math.fabs(mercatorX_lon) < 180 and math.fabs(mercatorY_lat) < 90:
+			return False, False
+
+		if ((math.fabs(mercatorX_lon) > 20037508.3427892) or (math.fabs(mercatorY_lat) > 20037508.3427892)):
+			return False, False
+
+		x = mercatorX_lon
+		y = mercatorY_lat
+		num3 = x / 6378137.0
+		num4 = num3 * 57.295779513082323
+		num5 = math.floor(float((num4 + 180.0) / 360.0))
+		num6 = num4 - (num5 * 360.0)
+		num7 = 1.5707963267948966 - (2.0 * math.atan(math.exp((-1.0 * y) / 6378137.0)));
+		mercatorX_lon = num6
+		mercatorY_lat = num7 * 57.295779513082323
+
+		return mercatorX_lon, mercatorY_lat
+
+	"""
+		Changes the projection of the multi_polygon object to WGS84 from WebMercator
+	"""
+	def _project_geosummary_from_webmercator_to_WGS84(multi_polygon):
+		_multi_polygon = []
+		for polygon in multi_polygon:
+			_polygon = []
+			for coordinates in polygon:
+				_x, _y = _project_coordinate_from_webmercator_toWGs84(coordinates)
+				if _x and _y:
+					_polygon.append([_x, _y])
+			_multi_polygon.append(_polygon)
+		return _multi_polygon
+
 	def _build_geo_json(geolocation_responses):
 		geoJSON = {}
 		geoJSON['type'] = "FeatureCollection"
@@ -385,7 +427,8 @@ def export_category_results_as_geoJSON(category_name):
 				_feature['geometry'] = {}
 
 				_feature['geometry']['type'] = "MultiPolygon"
-				_feature['geometry']['coordinates'] = [geo_summary['geo_summary']]
+				_feature['geometry']['coordinates'] = \
+					[_project_geosummary_from_webmercator_to_WGS84(geo_summary['geo_summary'])]
 
 				del response[response['_geotagx_geolocation_key']]
 				del response['_geotagx_geolocation_key']
