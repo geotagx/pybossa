@@ -409,7 +409,7 @@ def export_category_results_as_geoJSON(category_name):
 		for polygon in multi_polygon:
 			_polygon = []
 			for coordinates in polygon:
-				_x, _y = _project_coordinate_from_webmercator_toWGs84(coordinates)
+				_x, _y = _project_coordinate_from_webmercator_toWGS84(coordinates)
 				if _x and _y:
 					_polygon.append([_x, _y])
 			_multi_polygon.append(_polygon)
