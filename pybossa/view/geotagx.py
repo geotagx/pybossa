@@ -566,6 +566,18 @@ def sourcerer_proxy():
 		return jsonify(response)
 
 """
+	End point to get meta data about Categories for which data is being collected via 
+	geotagx-sourcerers
+"""
+@blueprint.route('/sourcerer/categories.json')
+def sourcerer_categories():
+	try:
+		categories = current_app.config['GEOTAGX_SOURCERER_CATEGORIES']
+	except:
+		categories = []
+	return jsonify(categories)
+
+"""
 	Endpoint to retrieve list of latest blog posts
 """
 @blueprint.route('/blogs')
