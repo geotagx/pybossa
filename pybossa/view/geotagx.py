@@ -41,6 +41,7 @@ import numpy as np
 import re
 import datetime
 import math
+import base64
 
 blueprint = Blueprint('geotagx', __name__)
 geotagx_json_exporter = JsonExporter()
@@ -550,8 +551,17 @@ def export_users():
 def sourcerer_proxy():
 	data = request.args.get('sourcerer-data')
 	try:
-		data = str(datetime.datetime.utcnow())+"%%%%"+data
-		sentinel.slave.lpush("GEOTAGX-SOURCERER-QUEUE", data);
+		data = base64.b64decode(data)
+		data = json.loads(data)
+		data['timestamp'] = str(datetime.datetime.utcnow())
+		image_url = data['image_url']
+
+		# The "GEOTAGX-SOURCERER-HASH" key represents the overall knowledge of GeoTagX about all the images collected via sourcerers
+		hsetnx_response = sentinel.slave.hsetnx("GEOTAGX-SOURCERER-HASH", image_url, json.dumps(data))
+		if hsetnx_response == 1: # Case when the image_url has not yet been seen
+			# Save it into a "Queue" modelled as a hash, where it waits until the admin approves it
+			sentinel.slave.hsetnx("GEOTAGX-SOURCERER-HASHQUEUE", image_url, json.dumps(data))
+
 
 		response = {}
 		response['state'] = "SUCCESS"
