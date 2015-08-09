@@ -22,6 +22,7 @@ from pybossa.model.user import User
 from pybossa.model.task_run import TaskRun
 from pybossa.model.task import Task
 from pybossa.model.project import Project
+from pybossa.model.category import Category
 from pybossa.model.blogpost import Blogpost
 from pybossa.util import Pagination, pretty_date, admin_required, UnicodeWriter
 from pybossa.auth import ensure_authorized_to
@@ -41,7 +42,7 @@ import numpy as np
 import re
 import datetime
 import math
-import base64
+import base64, hashlib, random
 
 blueprint = Blueprint('geotagx', __name__)
 geotagx_json_exporter = JsonExporter()
@@ -559,7 +560,7 @@ def sourcerer_proxy():
 		# The "GEOTAGX-SOURCERER-HASH" key represents the overall knowledge of GeoTagX about all the images collected via sourcerers
 		hsetnx_response = sentinel.slave.hsetnx("GEOTAGX-SOURCERER-HASH", image_url, json.dumps(data))
 		if hsetnx_response == 1: # Case when the image_url has not yet been seen
-			# Save it into a "Queue" modelled as a hash, where it waits until the admin approves it
+			# Save it into a "Queue" modelled as a hash, where it waits until the admin approves or rejects it
 			sentinel.slave.hsetnx("GEOTAGX-SOURCERER-HASHQUEUE", image_url, json.dumps(data))
 
 
@@ -586,6 +587,90 @@ def sourcerer_categories():
 	except:
 		categories = []
 	return jsonify(categories)
+
+
+"""
+	Implements the Dashboard for GeoTag-X Sourcerer
+	which lets admins push contributed images directly into the projects
+	(via the GeoTag-X Sourcerer Sink Daemon)
+"""
+@blueprint.route('/sourcerer/dashboard')
+@login_required
+@admin_required
+def sourcerer_dashboard():
+	queue = sentinel.slave.hgetall("GEOTAGX-SOURCERER-HASHQUEUE")
+	#TODO : Handle Exception
+	queue_object = {}
+	for _key in queue.keys():
+		_obj = json.loads(queue[_key])
+		_m = hashlib.md5()
+		_m.update(_obj['image_url'])
+		_obj['id'] = _m.hexdigest()
+		queue_object[_key] = _obj
+	return render_template('geotagx/sourcerer/dashboard.html', queue = queue_object)
+
+@blueprint.route('/sourcerer/commands', methods = ['POST'])
+@login_required
+@admin_required
+def sourcerer_dashboard_commands():
+	try:
+		commands = request.form['commands']
+		commands = json.loads(base64.b64decode(commands))
+
+		approve = []
+		if "approve" in commands.keys():
+			approve = commands['approve']
+		reject = []
+		if "reject" in commands.keys():
+			reject = commands['reject']
+
+		# Deal with Approved Items
+		for _item in approve:
+			_categories = _item['categories']
+			IMAGE_URL = _item['image_url']
+			SOURCE_URI = _item['source_uri']
+
+			for _category in _categories:
+				category_objects = Category.query.filter(Category.short_name == _category)
+				for category_object in category_objects:
+					related_projects = Project.query.filter(Project.category == category_object)
+					for related_project in related_projects:
+						# Start building Task Object
+						_task_object = Task()
+						_task_object.project_id = related_project.id
+
+						# Build Info Object from whatever data we have
+						_info_object = {}
+						_info_object['image_url'] = IMAGE_URL
+						_info_object['source_uri'] = SOURCE_URI
+						_info_object['id'] = SOURCE_URI + "_" + \
+											''.join(random.choice('0123456789ABCDEF') for i in range(16))
+
+						_task_object.info = _info_object
+						print _task_object
+						print _info_object
+
+						db.session.add(_task_object)
+						db.session.commit()
+			# Delete from GEOTAGX-SOURCERER-HASHQUEUE
+			sentinel.slave.hdel("GEOTAGX-SOURCERER-HASHQUEUE", IMAGE_URL)
+
+		# Deal with rejected items
+		for _item in reject:
+			#Directly delete from GEOTAGX-SOURCERER-HASHQUEUE
+			IMAGE_URL = _item['image_url']
+			sentinel.slave.hdel("GEOTAGX-SOURCERER-HASHQUEUE", IMAGE_URL)
+
+		_result = {
+			"result" : "SUCCESS"
+		}
+		return jsonify(_result)
+	except Exception as e:
+		_result = {
+			"result" : "ERROR",
+		}
+		return jsonify(_result)
+
 
 """
 	Endpoint to retrieve list of latest blog posts
