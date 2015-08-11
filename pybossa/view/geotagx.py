@@ -687,8 +687,17 @@ def blogs():
 	Show all blog posts for now
 	TODO : this should show only a slice of all the blogposts with pagination
 	"""
-	blogposts = Blogpost.query.all()
-	return render_template('geotagx/blogs/blogs.html', blogposts = blogposts)
+	blogposts = Blogpost.query.all()[::-1]
+	left_column = []
+	right_column = []
+
+	for idx, val in enumerate(blogposts):
+		if idx%2 == 0:
+			left_column.append(val)
+		else:
+			right_column.append(val)
+
+	return render_template('geotagx/blogs/blogs.html', left_column=left_column, right_column=right_column)
 
 @blueprint.route('/feedback')
 def feedback():
