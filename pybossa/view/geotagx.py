@@ -502,6 +502,9 @@ def export_users():
             json_datum['geotagx_survey_status'] = user.info['geotagx_survey_status']
           else:
             json_datum['geotagx_survey_status'] = "RESPONSE_NOT_TAKEN"
+
+          # Append total task_runs to json export data
+          json_datum['task_runs'] = len(TaskRun.query.filter(TaskRun.user_id == user.id).all())
           json_users.append(json_datum)
         return json.dumps(json_users)
 
@@ -531,10 +534,13 @@ def export_users():
           values.append(user.info['geotagx_survey_status'])
         else:
           values.append('RESPONSE_NOT_TAKEN') 
+
+        # Add total task_runs by the user
+        values.append(len(TaskRun.query.filter(TaskRun.user_id == user.id).all()))
         writer.writerow(values)
 
     def add_headers(writer):
-        writer.writerow(sorted(exportable_attributes) + ['geotagx_survey_status'])
+        writer.writerow(sorted(exportable_attributes) + ['geotagx_survey_status', 'task_runs'])
 
     export_formats = ["json", "csv"]
 
