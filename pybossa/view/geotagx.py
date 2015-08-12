@@ -37,6 +37,7 @@ from wtforms import Form, IntegerField, DecimalField, TextField, BooleanField, \
     SelectField, validators, TextAreaField, PasswordField, FieldList, SubmitField
 from flask.ext.mail import Message
 from pybossa.util import admin_required, UnicodeWriter
+from sqlalchemy import desc
 from flask import jsonify, Response
 from StringIO import StringIO
 import json
@@ -693,7 +694,7 @@ def blogs():
 	Show all blog posts for now
 	TODO : this should show only a slice of all the blogposts with pagination
 	"""
-	blogposts = Blogpost.query.all()[::-1]
+	blogposts = Blogpost.query.order_by(desc(Blogpost.created)).all()
 	left_column = []
 	right_column = []
 
