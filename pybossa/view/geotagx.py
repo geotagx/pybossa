@@ -26,13 +26,16 @@ from pybossa.model.category import Category
 from pybossa.model.blogpost import Blogpost
 from pybossa.util import Pagination, pretty_date, admin_required, UnicodeWriter
 from pybossa.auth import ensure_authorized_to
-from pybossa.core import db, task_repo, user_repo, sentinel
+from pybossa.core import db, task_repo, user_repo, sentinel, mail
 from pybossa.cache import users as cached_users
 from pybossa.cache import projects as cached_projects
 from pybossa.view import projects as projects_view
 from pybossa.exporter.json_export import JsonExporter
 from flask_oauthlib.client import OAuthException
 from flask.ext.login import login_required, login_user, logout_user, current_user
+from wtforms import Form, IntegerField, DecimalField, TextField, BooleanField, \
+    SelectField, validators, TextAreaField, PasswordField, FieldList, SubmitField
+from flask.ext.mail import Message
 from pybossa.util import admin_required, UnicodeWriter
 from flask import jsonify, Response
 from StringIO import StringIO
@@ -52,6 +55,9 @@ def setup_geotagx_config_default_params():
 	""" Sets up default values for geotagx specific config params """
 	if "GEOTAGX_FINAL_SURVEY_TASK_REQUIREMENTS" not in current_app.config.keys():
 		current_app.config['GEOTAGX_FINAL_SURVEY_TASK_REQUIREMENTS'] = 30
+
+	if "GEOTAGX_NEWSLETTER_DEBUG_EMAIL_LIST" not in current_app.config.keys():
+		current_app.config['GEOTAGX_NEWSLETTER_DEBUG_EMAIL_LIST'] = []
 
 @blueprint.route('/get_geotagx_survey_status')
 def get_geotagx_survey_status():
@@ -698,6 +704,49 @@ def blogs():
 			right_column.append(val)
 
 	return render_template('geotagx/blogs/blogs.html', left_column=left_column, right_column=right_column)
+
+"""
+	Form class for Newsletter form
+"""
+class NewsletterForm(Form):
+  subject = TextField("Subject")
+  debug_mode = BooleanField("Debug Mode")
+  message = TextAreaField("Message")
+  submit = SubmitField("Send")
+
+"""
+	Endpoint to send newsletter to all subscribers
+"""
+@blueprint.route('/newsletter', methods=['GET', 'POST'])
+def newsletter():
+	form = NewsletterForm()
+	if request.method == "POST":
+		try:
+			if request.form['debug_mode']:
+				SUBJECT = "DEBUG :: "+request.form['subject']
+				BCC_LIST = current_app.config['GEOTAGX_NEWSLETTER_DEBUG_EMAIL_LIST']
+			else:
+				SUBJECT = request.form['subject']
+				user_list = User.query.with_entities(User.email_addr).all()
+				BCC_LIST = []
+				for _user_email in user_list:
+					BCC_LIST.append(_user_email[0])
+
+			mail_dict = dict(
+					subject=SUBJECT,
+					body=request.form['message'],
+					recipients=['geotagx@cern.ch'],#The "To" field of the email always points to the geotagx e-group. Also helps in archiving.
+					bcc=BCC_LIST
+				)
+			message = Message(**mail_dict)
+			mail.send(message)
+			flash("Newsletter sent successfully")
+		except:
+			flash("Unable to send newsletter. Please contact the systems administrator.", 'error')
+
+	debug_emails = current_app.config['GEOTAGX_NEWSLETTER_DEBUG_EMAIL_LIST']
+	return render_template("/geotagx/newsletter/newsletter.html", form=form, debug_emails=debug_emails )
+
 
 @blueprint.route('/feedback')
 def feedback():
