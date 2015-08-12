@@ -718,6 +718,8 @@ class NewsletterForm(Form):
 	Endpoint to send newsletter to all subscribers
 """
 @blueprint.route('/newsletter', methods=['GET', 'POST'])
+@login_required
+@admin_required
 def newsletter():
 	form = NewsletterForm()
 	if request.method == "POST":
