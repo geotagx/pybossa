@@ -47,6 +47,7 @@ import re
 import datetime
 import math
 import base64, hashlib, random
+import markdown
 
 blueprint = Blueprint('geotagx', __name__)
 geotagx_json_exporter = JsonExporter()
@@ -737,7 +738,7 @@ def newsletter():
 
 			mail_dict = dict(
 					subject=SUBJECT,
-					body=request.form['message'],
+					html=markdown.markdown(request.form['message']),
 					recipients=['geotagx@cern.ch'],#The "To" field of the email always points to the geotagx e-group. Also helps in archiving.
 					bcc=BCC_LIST
 				)
