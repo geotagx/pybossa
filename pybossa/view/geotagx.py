@@ -742,7 +742,7 @@ def newsletter():
 				)
 			message = Message(**mail_dict)
 			mail.send(message)
-			flash("Newsletter sent successfully")
+			flash("Newsletter sent successfully", 'success')
 		except:
 			flash("Unable to send newsletter. Please contact the systems administrator.", 'error')
 
