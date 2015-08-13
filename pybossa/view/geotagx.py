@@ -731,7 +731,7 @@ def newsletter():
 				BCC_LIST = current_app.config['GEOTAGX_NEWSLETTER_DEBUG_EMAIL_LIST']
 			else:
 				SUBJECT = request.form['subject']
-				user_list = User.query.with_entities(User.email_addr).filter(User.privacy_mode==False).all()
+				user_list = User.query.with_entities(User.email_addr).filter(User.subscribed==True).all()
 				BCC_LIST = []
 				for _user_email in user_list:
 					BCC_LIST.append(_user_email[0])
