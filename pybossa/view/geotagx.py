@@ -717,8 +717,9 @@ class NewsletterForm(Form):
   submit = SubmitField("Send")
 
 """
-	Endpoint to send newsletter to all subscribers
+	Endpoint to send newsletter to all subscribersIL
 """
+EMAIL_REGEX = "([^@|\s]+@[^@]+\.[^@|\s]+)"
 @blueprint.route('/newsletter', methods=['GET', 'POST'])
 @login_required
 @admin_required
@@ -726,24 +727,27 @@ def newsletter():
 	form = NewsletterForm()
 	if request.method == "POST":
 		try:
-			if request.form['debug_mode']:
+			if request.form.get('debug_mode'):
 				SUBJECT = "DEBUG :: "+request.form['subject']
-				BCC_LIST = current_app.config['GEOTAGX_NEWSLETTER_DEBUG_EMAIL_LIST']
+				EMAIL_LIST = current_app.config['GEOTAGX_NEWSLETTER_DEBUG_EMAIL_LIST']
 			else:
 				SUBJECT = request.form['subject']
 				user_list = User.query.with_entities(User.email_addr).filter(User.subscribed==True).all()
-				BCC_LIST = []
-				for _user_email in user_list:
-					BCC_LIST.append(_user_email[0])
+				EMAIL_LIST = []
 
+				for _user_email in user_list:
+					if re.match(EMAIL_REGEX, _user_email[0]):
+						EMAIL_LIST.append(_user_email[0])
+				
 			mail_dict = dict(
 					subject=SUBJECT,
 					html=markdown.markdown(request.form['message']),
-					recipients=['geotagx@cern.ch'],#The "To" field of the email always points to the geotagx e-group. Also helps in archiving.
-					bcc=BCC_LIST
+					# recipients=['geotagx@cern.ch'],#The "To" field of the email always points to the geotagx e-group. Also helps in archiving.
 				)
-			message = Message(**mail_dict)
-			mail.send(message)
+			for _email in EMAIL_LIST:
+				mail_dict['recipients'] = [_email]
+				message = Message(**mail_dict)
+				mail.send(message)
 			flash("Newsletter sent successfully", 'success')
 		except:
 			flash("Unable to send newsletter. Please contact the systems administrator.", 'error')
