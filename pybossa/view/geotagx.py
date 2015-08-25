@@ -755,6 +755,9 @@ def newsletter():
 	debug_emails = current_app.config['GEOTAGX_NEWSLETTER_DEBUG_EMAIL_LIST']
 	return render_template("/geotagx/newsletter/newsletter.html", form=form, debug_emails=debug_emails )
 
+@blueprint.route('/map-summary/<category_name>')
+def map_summary(category_name):
+       return render_template("/geotagx/map_summary/summary.html", category_name=category_name)
 
 @blueprint.route('/feedback')
 def feedback():
