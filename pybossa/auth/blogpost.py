@@ -31,7 +31,7 @@ class BlogpostAuth(object):
             return False
         project = self._get_project(blogpost, project_id)
         if blogpost is None:
-            return project.owner_id == user.id
+            return user.admin or project.owner_id == user.id
         return user.admin or blogpost.user_id == project.owner_id == user.id
 
     def _read(self, user, blogpost=None, project_id=None):
