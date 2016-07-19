@@ -1,7 +1,7 @@
 # -*- coding: utf8 -*-
 # This file is part of PyBossa.
 #
-# Copyright (C) 2013 SF Isle of Man Limited
+# Copyright (C) 2015 SciFabric LTD.
 #
 # PyBossa is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as published by
@@ -60,6 +60,16 @@ class TestCategoryAPI(TestAPI):
         for item in data:
             assert item['short_name'] == 'thinking', item
         assert len(data) == 1, data
+
+        # Keyset pagination
+        CategoryFactory.create(name='computing', short_name='computing')
+        res = self.app.get(url)
+        data = json.loads(res.data)
+        tmp = '?limit=1&last_id=%s' % data[0]['id']
+        res = self.app.get(url + tmp)
+        data_new = json.loads(res.data)
+        assert len(data_new) == 1, data_new
+        assert data_new[0]['id'] == data[1]['id']
 
         # Errors
         res = self.app.get(url + "?something")

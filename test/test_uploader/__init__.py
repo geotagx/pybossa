@@ -1,7 +1,7 @@
 # -*- coding: utf8 -*-
 # This file is part of PyBossa.
 #
-# Copyright (C) 2013 SF Isle of Man Limited
+# Copyright (C) 2015 SciFabric LTD.
 #
 # PyBossa is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as published by
@@ -23,8 +23,8 @@ from pyrax.fakes import FakeContainer
 
 fake_container = MagicMock()
 fake_container.make_public.return_value = True
-cdn_uri_mock = PropertyMock(return_value='http://rackspace.com')
-type(fake_container).cdn_uri = cdn_uri_mock
+cdn_ssl_uri_mock = PropertyMock(return_value='https://rackspace.com')
+type(fake_container).cdn_ssl_uri = cdn_ssl_uri_mock
 cdn_enabled_mock = PropertyMock(return_value=True)
 type(fake_container).cdn_enabled = cdn_enabled_mock
 

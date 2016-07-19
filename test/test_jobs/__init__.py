@@ -1,7 +1,7 @@
 # -*- coding: utf8 -*-
 # This file is part of PyBossa.
 #
-# Copyright (C) 2013 SF Isle of Man Limited
+# Copyright (C) 2015 SciFabric LTD.
 #
 # PyBossa is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as published by
@@ -21,6 +21,7 @@ from pybossa.jobs import create_dict_jobs, enqueue_periodic_jobs,\
     get_quarterly_date, get_periodic_jobs
 from mock import patch
 from nose.tools import assert_raises
+from default import with_context
 
 def jobs():
     """Generator."""
@@ -65,6 +66,7 @@ class TestJobs(object):
         msg = "%s jobs in %s have been enqueued" % (0, queue_name)
         assert res == msg, res
 
+    @with_context
     @patch('pybossa.jobs.get_export_task_jobs')
     @patch('pybossa.jobs.get_project_jobs')
     @patch('pybossa.jobs.get_autoimport_jobs')

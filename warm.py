@@ -1,7 +1,7 @@
 # -*- coding: utf8 -*-
 # This file is part of PyBossa.
 #
-# Copyright (C) 2014 SF Isle of Man Limited
+# Copyright (C) 2015 SciFabric LTD.
 #
 # PyBossa is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as published by
@@ -75,8 +75,7 @@ def warm_cache():
                  for a in apps:
                      warm_app(a['id'], a['short_name'])
         # Users
-        cached_users.get_leaderboard(app.config['LEADERBOARD'], 'anonymous')
-        cached_users.get_top()
+        cached_users.get_leaderboard(app.config['LEADERBOARD'])
 
 
 ## ==================================================

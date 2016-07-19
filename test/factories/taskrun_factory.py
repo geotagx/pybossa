@@ -1,7 +1,7 @@
 # -*- coding: utf8 -*-
 # This file is part of PyBossa.
 #
-# Copyright (C) 2013 SF Isle of Man Limited
+# Copyright (C) 2015 SciFabric LTD.
 #
 # PyBossa is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as published by
@@ -37,9 +37,11 @@ class TaskRunFactory(BaseFactory):
     project_id = factory.LazyAttribute(lambda task_run: task_run.project.id)
     user = factory.SubFactory('factories.UserFactory')
     user_id = factory.LazyAttribute(lambda task_run: task_run.user.id)
+    info = dict(answer='yes')
 
 
 class AnonymousTaskRunFactory(TaskRunFactory):
     user = None
     user_id = None
     user_ip = '127.0.0.1'
+    info = 'yes'

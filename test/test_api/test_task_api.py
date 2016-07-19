@@ -1,7 +1,7 @@
 # -*- coding: utf8 -*-
 # This file is part of PyBossa.
 #
-# Copyright (C) 2013 SF Isle of Man Limited
+# Copyright (C) 2015 SciFabric LTD.
 #
 # PyBossa is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as published by
@@ -23,18 +23,47 @@ from mock import patch, call
 
 from factories import ProjectFactory, TaskFactory, TaskRunFactory, UserFactory
 
+from pybossa.repositories import ProjectRepository
 from pybossa.repositories import TaskRepository
+from pybossa.repositories import ResultRepository
+
+project_repo = ProjectRepository(db)
 task_repo = TaskRepository(db)
+result_repo = ResultRepository(db)
 
 
 class TestTaskAPI(TestAPI):
+
+    def create_result(self, n_results=1, n_answers=1, owner=None,
+                      filter_by=False):
+        if owner:
+            owner = owner
+        else:
+            owner = UserFactory.create()
+        project = ProjectFactory.create(owner=owner)
+        tasks = []
+        for i in range(n_results):
+            tasks.append(TaskFactory.create(n_answers=n_answers,
+                                            project=project))
+        for i in range(n_answers):
+            for task in tasks:
+                TaskRunFactory.create(task=task, project=project)
+        if filter_by:
+            return result_repo.filter_by(project_id=1)
+        else:
+            return result_repo.get_by(project_id=1)
 
 
     @with_context
     def test_task_query_without_params(self):
         """ Test API Task query"""
         project = ProjectFactory.create()
-        TaskFactory.create_batch(10, project=project, info={'question': 'answer'})
+        t1 = TaskFactory.create(created='2015-01-01T14:37:30.642119', info={'question': 'answer'})
+        tasks = TaskFactory.create_batch(8, project=project, info={'question': 'answer'})
+        t2 = TaskFactory.create(created='2019-01-01T14:37:30.642119', info={'question': 'answer'})
+        tasks.insert(0, t1)
+        tasks.append(t2)
+
         res = self.app.get('/api/task')
         tasks = json.loads(res.data)
         assert len(tasks) == 10, tasks
@@ -44,12 +73,42 @@ class TestTaskAPI(TestAPI):
         # The output should have a mime-type: application/json
         assert res.mimetype == 'application/json', res
 
+        # Desc filter
+        url = "/api/task?desc=true"
+        res = self.app.get(url)
+        data = json.loads(res.data)
+        err_msg = "It should get the last item first."
+        assert data[0]['created'] == tasks[len(tasks)-1]['created'], err_msg
+
+
+    @with_context
+    def test_task_query_without_params_with_context(self):
+        """ Test API Task query with context"""
+        user = UserFactory.create()
+        project_oc = ProjectFactory.create(owner=user)
+        project_two = ProjectFactory.create()
+        TaskFactory.create_batch(10, project=project_oc, info={'question': 'answer'})
+        TaskFactory.create_batch(10, project=project_two, info={'question': 'answer'})
+        res = self.app.get('/api/task?api_key=' + user.api_key)
+        tasks = json.loads(res.data)
+        assert len(tasks) == 10, tasks
+        for task in tasks:
+            assert task['project_id'] == project_oc.id, task
+            assert task['info']['question'] == 'answer', task
+
+        # The output should have a mime-type: application/json
+        assert res.mimetype == 'application/json', res
+
+        res = self.app.get('/api/task?api_key=' + user.api_key + "&all=1")
+        tasks = json.loads(res.data)
+        assert len(tasks) == 20, tasks
+
 
     @with_context
     def test_task_query_with_params(self):
         """Test API query for task with params works"""
         project = ProjectFactory.create()
-        TaskFactory.create_batch(10, project=project)
+        tasks = TaskFactory.create_batch(10, project=project)
         # Test for real field
         res = self.app.get("/api/task?project_id=1")
         data = json.loads(res.data)
@@ -78,6 +137,133 @@ class TestTaskAPI(TestAPI):
         for item in data:
             assert item['project_id'] == 1, item
         assert len(data) == 5, data
+
+        # Keyset pagination
+        url = "/api/task?project_id=1&limit=5&last_id=%s" % tasks[4].id
+        res = self.app.get(url)
+        data = json.loads(res.data)
+        for item in data:
+            assert item['project_id'] == 1, item
+        assert len(data) == 5, data
+        assert data[0]['id'] == tasks[5].id, data
+
+
+    @with_context
+    def test_task_query_with_params_with_context(self):
+        """Test API query for task with params works with context"""
+        user = UserFactory.create()
+        user_two = UserFactory.create()
+        project_oc = ProjectFactory.create(owner=user)
+        project_two = ProjectFactory.create()
+        tasks = TaskFactory.create_batch(10, project=project_oc)
+        TaskFactory.create_batch(10, project=project_two)
+        # Test for real field
+        res = self.app.get("/api/task?project_id="+ str(project_oc.id) + "&api_key=" + user.api_key)
+        data = json.loads(res.data)
+        # Should return then results
+        assert len(data) == 10, data
+        # Correct result
+        for t in data:
+            assert t['project_id'] == project_oc.id, t
+
+        res = self.app.get("/api/task?api_key=" + user.api_key + "&all=1")
+        data = json.loads(res.data)
+        # Should return one result
+        assert len(data) == 20, data
+
+
+        # Valid field but wrong value
+        res = self.app.get("/api/task?project_id=99999999&api_key=" + user.api_key)
+        data = json.loads(res.data)
+        assert len(data) == 0, data
+
+        # Multiple fields
+        res = self.app.get('/api/task?project_id=1&state=ongoing&api_key=' + user.api_key)
+        data = json.loads(res.data)
+        # One result
+        assert len(data) == 10, data
+        # Correct result
+        for t in data:
+            assert t['project_id'] == project_oc.id, data
+            assert t['state'] == u'ongoing', data
+
+        # Limits
+        res = self.app.get("/api/task?project_id=1&limit=5&api_key=" + user.api_key)
+        data = json.loads(res.data)
+        assert len(data) == 5, data
+        for item in data:
+            assert item['project_id'] == project_oc.id, item
+
+        # Keyset pagination
+        url = "/api/task?project_id=1&limit=5&last_id=%s&api_key=%s" % (tasks[4].id, user.api_key)
+        res = self.app.get(url)
+        data = json.loads(res.data)
+        assert len(data) == 5, data
+        assert data[0]['id'] == tasks[5].id, data
+        for item in data:
+            assert item['project_id'] == project_oc.id, item
+
+        # Test for real field with user_two
+        res = self.app.get("/api/task?project_id="+ str(project_oc.id) + "&api_key=" + user_two.api_key)
+        data = json.loads(res.data)
+        # Should return then results
+        assert len(data) == 0, data
+        # Test for real field with user_two
+        res = self.app.get("/api/task?all=1&project_id="+ str(project_oc.id) + "&api_key=" + user_two.api_key)
+        data = json.loads(res.data)
+        # Should return then results
+        assert len(data) == 10, data
+        # Correct result
+        for t in data:
+            assert t['project_id'] == project_oc.id, t
+
+        res = self.app.get("/api/task?api_key=" + user_two.api_key + "&all=1")
+        data = json.loads(res.data)
+        # Should return one result
+        assert len(data) == 20, data
+
+
+        # Valid field but wrong value
+        res = self.app.get("/api/task?project_id=99999999&api_key=" + user_two.api_key)
+        data = json.loads(res.data)
+        assert len(data) == 0, data
+
+        # Multiple fields
+        res = self.app.get('/api/task?project_id=1&state=ongoing&api_key=' + user_two.api_key)
+        data = json.loads(res.data)
+        # One result
+        assert len(data) == 0, data
+        res = self.app.get('/api/task?all=1&project_id=1&state=ongoing&api_key=' + user_two.api_key)
+        data = json.loads(res.data)
+        # One result
+        assert len(data) == 10, data
+        # Correct result
+        for t in data:
+            assert t['project_id'] == project_oc.id, data
+            assert t['state'] == u'ongoing', data
+
+        # Limits
+        res = self.app.get("/api/task?project_id=1&limit=5&api_key=" + user_two.api_key)
+        data = json.loads(res.data)
+        assert len(data) == 0, data
+        res = self.app.get("/api/task?all=1&project_id=1&limit=5&api_key=" + user_two.api_key)
+        data = json.loads(res.data)
+        assert len(data) == 5, data
+        for item in data:
+            assert item['project_id'] == project_oc.id, item
+
+        # Keyset pagination
+        url = "/api/task?project_id=1&limit=5&last_id=%s&api_key=%s" % (tasks[4].id, user_two.api_key)
+        res = self.app.get(url)
+        data = json.loads(res.data)
+        assert len(data) == 0, data
+        url = "/api/task?all=1&project_id=1&limit=5&last_id=%s&api_key=%s" % (tasks[4].id, user_two.api_key)
+        res = self.app.get(url)
+        data = json.loads(res.data)
+        assert len(data) == 5, data
+        assert data[0]['id'] == tasks[5].id, data
+        for item in data:
+            assert item['project_id'] == project_oc.id, item
 
 
     @with_context
@@ -209,6 +395,7 @@ class TestTaskAPI(TestAPI):
         out = json.loads(res.data)
         assert_equal(res.status, '200 OK', res.data)
         assert_equal(task.n_answers, data['n_answers'])
+        assert_equal(task.state, 'ongoing')
         assert task.id == out['id'], out
 
         ### root
@@ -216,6 +403,7 @@ class TestTaskAPI(TestAPI):
                            data=root_datajson)
         assert_equal(res.status, '200 OK', res.data)
         assert_equal(root_task.n_answers, root_data['n_answers'])
+        assert_equal(task.state, 'ongoing')
 
         # PUT with not JSON data
         res = self.app.put(url, data=data)
@@ -244,6 +432,47 @@ class TestTaskAPI(TestAPI):
         assert err['target'] == 'task', err
         assert err['action'] == 'PUT', err
         assert err['exception_cls'] == 'TypeError', err
+
+    @with_context
+    def test_task_update_state(self):
+        """Test API task n_answers updates state properly."""
+        user = UserFactory.create()
+        project = ProjectFactory.create(owner=user)
+        task = TaskFactory.create(project=project, n_answers=1,
+                                  state='ongoing')
+        data = {'n_answers': 2}
+        datajson = json.dumps(data)
+
+        url = '/api/task/%s?api_key=%s' % (task.id, user.api_key)
+        res = self.app.put(url, data=datajson)
+        out = json.loads(res.data)
+        assert_equal(res.status, '200 OK', res.data)
+        assert_equal(task.n_answers, data['n_answers'])
+        assert_equal(task.state, 'ongoing')
+        assert task.id == out['id'], out
+
+        task.state = 'completed'
+        task_repo.update(task)
+
+        data = {'n_answers': 1}
+        datajson = json.dumps(data)
+
+        res = self.app.put(url, data=datajson)
+        out = json.loads(res.data)
+        assert_equal(res.status, '200 OK', res.data)
+        assert_equal(task.n_answers, data['n_answers'])
+        assert_equal(task.state, 'completed')
+        assert task.id == out['id'], out
+
+        data = {'n_answers': 5}
+        datajson = json.dumps(data)
+
+        res = self.app.put(url, data=datajson)
+        out = json.loads(res.data)
+        assert_equal(res.status, '200 OK', res.data)
+        assert_equal(task.n_answers, data['n_answers'])
+        assert_equal(task.state, 'ongoing')
+        assert task.id == out['id'], out
 
 
     @with_context
@@ -319,3 +548,30 @@ class TestTaskAPI(TestAPI):
         assert_equal(res.status, '204 NO CONTENT', res.data)
         task_runs = task_repo.filter_task_runs_by(task_id=task.id)
         assert len(task_runs) == 0, "There should not be any task run for task"
+
+    @with_context
+    def test_delete_task_when_result_associated(self):
+        """Test API delete task fails when a result is associated."""
+        result = self.create_result()
+        project = project_repo.get(result.project_id)
+
+        url = '/api/task/%s?api_key=%s' % (result.task_id,
+                                           project.owner.api_key)
+        res = self.app.delete(url)
+        assert_equal(res.status, '403 FORBIDDEN', res.status)
+
+    @with_context
+    def test_delete_task_when_result_associated_variation(self):
+        """Test API delete task fails when a result is associated after
+        increasing the n_answers changing its state from completed to
+        ongoing."""
+        result = self.create_result()
+        project = project_repo.get(result.project_id)
+        task = task_repo.get_task(result.task_id)
+        task.n_answers = 100
+        task_repo.update(task)
+
+        url = '/api/task/%s?api_key=%s' % (result.task_id,
+                                           project.owner.api_key)
+        res = self.app.delete(url)
+        assert_equal(res.status, '403 FORBIDDEN', res.status)

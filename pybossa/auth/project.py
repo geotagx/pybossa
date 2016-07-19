@@ -1,7 +1,7 @@
 # -*- coding: utf8 -*-
 # This file is part of PyBossa.
 #
-# Copyright (C) 2013 SF Isle of Man Limited
+# Copyright (C) 2015 SciFabric LTD.
 #
 # PyBossa is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as published by
@@ -18,18 +18,27 @@
 
 
 class ProjectAuth(object):
+    _specific_actions = ['publish']
+
+    def __init__(self, task_repo, result_repo):
+        self.task_repo = task_repo
+        self.result_repo = result_repo
+
+    @property
+    def specific_actions(self):
+        return self._specific_actions
 
     def can(self, user, action, taskrun=None):
         action = ''.join(['_', action])
         return getattr(self, action)(user, taskrun)
 
     def _create(self, user, project=None):
+        if project is not None and user.is_authenticated():
+            return project.published != True
         return user.is_authenticated()
 
     def _read(self, user, project=None):
-        if project is None:
-            return True
-        if project.hidden:
+        if project is not None and project.published is False:
             return self._only_admin_or_owner(user, project)
         return True
 
@@ -37,7 +46,14 @@ class ProjectAuth(object):
         return self._only_admin_or_owner(user, project)
 
     def _delete(self, user, project):
+        if self.result_repo.get_by(project_id=project.id):
+            return False
         return self._only_admin_or_owner(user, project)
+
+    def _publish(self, user, project):
+        return (project.has_presenter() and
+            len(self.task_repo.filter_tasks_by(project_id=project.id)) > 0 and
+            self._only_admin_or_owner(user, project))
 
     def _only_admin_or_owner(self, user, project):
         return (not user.is_anonymous() and

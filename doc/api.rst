@@ -123,18 +123,51 @@ List
 List domain objects::
      
     GET http://{pybossa-site-url}/api/{domain-object}
-    
-For example, you can get a list of registered Projects like this::
+
+
+The API is context aware in the sense that if you've an API-KEY and you're authenticating
+the calls, then, the server will send you first your own related data: projects, tasks, and
+task runs. You can get access to all the projects, tasks, and task runs (the whole data base) using the
+parameter: **all=1**.
+
+For example, if an anonymous user access the generic api endpoints like::
 
     GET http://{pybossa-site-url}/api/project
+
+It will return all the projects from the DB, ordering them by ID. If you access it
+like authenticating yourself:: 
+
+    GET http://{pybossa-site-url}/api/project?api_key=YOURKEY
+
+Then, you will get your own list of projects. In other words, the projects that you 
+own. If you don't have a project, but you want to explore the API then you can use
+the **all=1** argument::
+
+    GET http://{pybossa-site-url}/api/project?api_key=YOURKEY&all=1
+
+This call will return all the projects from the DB ordering by ID.
+
+For example, you can get a list of your Projects like this::
+
+    GET http://{pybossa-site-url}/api/project
+    GET http://{pybossa-site-url}/api/project?api_key=YOURKEY
+    GET http://{pybossa-site-url}/api/project?api_key=YOURKEY&all=1
+
+Or a list of available Categories:: 
+
+    GET http://{pybossa-site-url}/api/category
 
 Or a list of Tasks::
 
     GET http://{pybossa-site-url}/api/task
+    GET http://{pybossa-site-url}/api/task?api_key=YOURKEY
+    GET http://{pybossa-site-url}/api/task?api_key=YOURKEY&all=1
 
 For a list of TaskRuns use::
 
     GET http://{pybossa-site-url}/api/taskrun
+    GET http://{pybossa-site-url}/api/taskrun?api_key=YOURKEY
+    GET http://{pybossa-site-url}/api/taskrun?api_key=YOURKEY&all=1
 
 Finally, you can get a list of users by doing::
 
@@ -153,10 +186,18 @@ Finally, you can get a list of users by doing::
     get more items at once it won't work.
 
 .. note::
+    **DEPRECATED (see next Note for a better and faster solution)**
     You can use the keyword **offset=N** in any **GET** query to skip that many 
     rows before beginning to get rows. If both **offset** and **limit** appear, 
     then **offset** rows are skipped before starting to count the **limit** rows 
     that are returned.
+
+.. note::
+    You can paginate the results of any GET query using the last ID of the
+    domain object that you have received and the parameter: **last_id**. For 
+    example, to get the next 20 items
+    after the last project ID that you've received you will write the query
+    like this: GET /api/project?last_id={{last_id}}.
 
 Get
 ~~~
@@ -173,7 +214,7 @@ Returns domain object.::
 
 If the object is not found you will get a JSON object like this:
 
-.. code-block:: JavaScript
+.. code-block:: js
 
     {
         "status": "failed",
@@ -203,6 +244,39 @@ It is possible to limit the number of returned objects::
 
     GET http://{pybossa-site-url}/api/{domain-object}[?field1=value&limit=20]
 
+
+It is possible to access first level JSON keys within the **info** field of Projects,
+Tasks, Task Runs and Results::
+
+    GET http://{pybossa-site-url}/api/{domain-object}[?field1=value&info=foo::bar&limit=20]
+
+To search within the first level (nested keys are not supported), you have to use the
+following format::
+
+    info=key::value
+
+For adding more keys::
+
+    info=key1::value1|key2::value2|keyN::valueN
+
+These parameters will be ANDs, so, it will return objects that have those keys with 
+and **and** operator.
+
+It is also possible to use full text search queries within those first level keys. For
+searching like that all you have to do is adding the following argument::
+
+    info=key1::value1&fulltextsearch=1
+
+That will return every object in the DB that has a key equal to key1 and contains in
+the value the word value1.
+
+Another option could be the following::
+
+    info=key1::value1|key2:word1%26word2&fulltextsearch=1
+
+This second query will return objects that has the words word1 and word2. It's important
+to escape the & operator with %26 to use the and operator.
+
 .. note::
     By default all GET queries return a maximum of 20 objects unless the
     **limit** keyword is used to get more: limit=50. However, a maximum amount
@@ -225,7 +299,7 @@ Create a domain object. Returns created domain object.::
 
 If an error occurs, the action will return a JSON object like this:
 
-.. code-block:: JavaScript
+.. code-block:: js
 
     {
         "status": "failed",
@@ -251,7 +325,7 @@ Update a domain object::
 
 If an error occurs, the action will return a JSON object like this:
 
-.. code-block:: JavaScript
+.. code-block:: js
 
     {
         "status": "failed",
@@ -277,7 +351,7 @@ Delete a domain object::
 
 If an error occurs, the action will return a JSON object like this:
 
-.. code-block:: JavaScript
+.. code-block:: js
 
     {
         "status": "failed",
@@ -328,6 +402,8 @@ Where 'provider' will be any of the third parties supported, i.e. 'twitter',
 Example Usage
 -------------
 
-Create a Project object::
+Create a Project object:
 
-  curl -X POST -H "Content-Type:application/json" -s -d '{"name":"myproject", "info":{"xyz":1}}' 'http://localhost:5000/api/project?api_key=API-KEY'
+.. code-block:: bash
+
+    curl -X POST -H "Content-Type:application/json" -s -d '{"name":"myproject", "info":{"xyz":1}}' 'http://localhost:5000/api/project?api_key=API-KEY'

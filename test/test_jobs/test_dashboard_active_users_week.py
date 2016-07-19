@@ -1,7 +1,7 @@
 # -*- coding: utf8 -*-
 # This file is part of PyBossa.
 #
-# Copyright (C) 2015 SF Isle of Man Limited
+# Copyright (C) 2015 SciFabric LTD.
 #
 # PyBossa is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as published by
@@ -16,7 +16,8 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with PyBossa.  If not, see <http://www.gnu.org/licenses/>.
 
-from pybossa.dashboard import dashboard_active_users_week, format_users_week
+from pybossa.dashboard.jobs import active_users_week
+from pybossa.dashboard.data import format_users_week
 from pybossa.core import db
 from factories.taskrun_factory import TaskRunFactory, AnonymousTaskRunFactory
 from default import Test, with_context
@@ -27,26 +28,26 @@ from mock import patch, MagicMock
 class TestDashBoardActiveUsers(Test):
 
     @with_context
-    @patch('pybossa.dashboard.db')
+    @patch('pybossa.dashboard.jobs.db')
     def test_materialized_view_refreshed(self, db_mock):
         """Test JOB dashboard materialized view is refreshed."""
         result = MagicMock()
         result.exists = True
         results = [result]
         db_mock.slave_session.execute.return_value = results
-        res = dashboard_active_users_week()
+        res = active_users_week()
         assert db_mock.session.execute.called
         assert res == 'Materialized view refreshed'
 
     @with_context
-    @patch('pybossa.dashboard.db')
+    @patch('pybossa.dashboard.jobs.db')
     def test_materialized_view_created(self, db_mock):
         """Test JOB dashboard materialized view is created."""
         result = MagicMock()
         result.exists = False
         results = [result]
         db_mock.slave_session.execute.return_value = results
-        res = dashboard_active_users_week()
+        res = active_users_week()
         assert db_mock.session.commit.called
         assert res == 'Materialized view created'
 
@@ -55,17 +56,17 @@ class TestDashBoardActiveUsers(Test):
         """Test JOB dashboard returns active users week runs."""
         TaskRunFactory.create()
         AnonymousTaskRunFactory.create()
-        dashboard_active_users_week()
+        active_users_week()
         sql = "select * from dashboard_week_users;"
-        results = db.session.execute(sql)
-        for row in results:
-            assert row.n_users == 1, row.n_users
+        results = db.session.execute(sql).fetchall()
+
+        assert results[0].n_users == 1, results[0].n_users
 
     @with_context
     def test_format_users_week(self):
         """Test format users week works."""
         TaskRunFactory.create()
-        dashboard_active_users_week()
+        active_users_week()
         res = format_users_week()
         assert len(res['labels']) == 1
         day = datetime.utcnow().strftime('%Y-%m-%d')
@@ -74,12 +75,12 @@ class TestDashBoardActiveUsers(Test):
         assert res['series'][0][0] == 1, res['series'][0][0]
 
     @with_context
-    @patch('pybossa.dashboard.db')
+    @patch('pybossa.dashboard.data.db')
     def test_format_users_week_empty(self, db_mock):
         """Test format users week empty works."""
         db_mock.slave_session.execute.return_value = []
         AnonymousTaskRunFactory.create()
-        dashboard_active_users_week()
+        active_users_week()
         res = format_users_week()
         assert len(res['labels']) == 1
         day = datetime.utcnow().strftime('%Y-%m-%d')

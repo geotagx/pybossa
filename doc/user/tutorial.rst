@@ -30,21 +30,20 @@ server.
    You can use http://crowdcrafting.org for testing. 
 
 When you create an account, you will have access to your profile by clicking on your 
-name, and then in the **My Settings** option:
-
-.. image:: http://i.imgur.com/nH9u2nk.png
+name, and then in the **My Settings** option.
 
 Then, you will be able to copy the
 `API-KEY that has been generated for you <http://crowdcrafting.org/account/profile>`_ 
 
-.. image:: http://i.imgur.com/aTooi6Q.png
+|
+.. image:: http://i.imgur.com/JcxciZc.png
+|
 
 This **API-KEY** allows you to create the
 project in PyBossa (only authenticated users can create projects and
 tasks, while everyone can collaborate solving the tasks).
 
 .. note::
-
     The Flickr Person Finder demo project uses :ref:`pbs` 
     that need to be installed in your system before proceeding. For this
     reason, we recommend you to configure a `virtualenv`_  for the project 
@@ -231,7 +230,7 @@ following:
 
 .. code-block:: bash
 
-    pbs add_tasks --tasks-file flickr_tasks.csv --tasks-type=csv
+    pbs add_tasks --tasks-file flickr_tasks.csv
 
 After running this program, you will see a progress bar that will let you know
 when all the tasks will be added to your project.
@@ -249,7 +248,7 @@ project:
 
 .. code-block:: bash
 
-    pbs add_tasks --tasks-file flickr_tasks.json --tasks-type=json
+    pbs add_tasks --tasks-file flickr_tasks.json
 
 Done! Again, a progress bar will show us how long it takes to add all the
 tasks. Once it's completed, we can actually move to the next step on the
@@ -300,7 +299,7 @@ ten, run the following:
 
 .. code-block:: bash
 
-    pbs add_tasks --tasks-file file --tasks-type=type --redundancy 10
+    pbs add_tasks --tasks-file file --redundancy 10
 
 In this case the **n_answers** field will make :ref:`task-scheduler` to try and 
 obtain 10 different answers from different users for each task in the file.
@@ -322,7 +321,7 @@ available ones, you can do it with pbs. Run the following command:
 
 .. code-block:: bash
 
-    pbs add_tasks --tasks-file file --tasks-type=type --priority 1
+    pbs add_tasks --tasks-file file --priority 1
 
 
 The priority is a number between 0.0 and 1.0. The highest priority is 1.0 and
@@ -794,24 +793,12 @@ The presenter will load one task, and you will be able to submit and save one
 answer for the current task.
 
 
-6. Check the results
---------------------
+Publishing the project
+======================
 
-In order to see the answers from the volunteers, you can open in your web
-browser the file **results.html**. The web page should show a chart pie with
-answers from the server http://crowdcrafting.org but you can modify the file
-**results.js** to poll your own server data.
-¬                                                                                    
-The results page shows the number of answers from the volunteers for a given
-task (the related photo will be shown), making easy to compare the results
-submitted by the volunteers.
-
-The results page is created using the `D3.JS library <http://d3js.org>`_.
-
-.. note::
-    You can see a demo of the results page `here
-    <http://dev.pybossa.com/app-flickrperson>`_
-
+Once everything is working, you will need to publish the project so people can
+start contributing to it. Please, check the :ref:`publishing` section for more
+details.
 
 Creating a tutorial for the users
 =================================
@@ -1172,6 +1159,7 @@ minutes (this is a value by default, can be changed in every PyBossa server).
 After this time, the user will be asked again to introduce the password if wants
 to continue contributing, and so on.
 
+.. _project-blog:
 
 Creating a blog for the project
 ===============================
@@ -1214,8 +1202,10 @@ your web-browser::
 You will find a simple interface that will allow you to export the Tasks and
 Task Runs to JSON_ and CSV_ formats:
 
-.. image:: http://i.imgur.com/IAvl9OL.png
+|
+.. image:: http://i.imgur.com/m5gDyjU.png
     :width: 100%
+|
 
 The previous methods will export all the tasks and task runs, **even if they
 are not completed**. When a task has been completed, in other words, when a 
@@ -1231,13 +1221,17 @@ You can check which tasks are completed, going to the project URL::
 And clicking in the **Tasks** link in the **left local navigation**, and then
 click in the **Browse** box:
 
-.. image:: http://i.imgur.com/2Q3x2wP.png
+|
+.. image:: http://i.imgur.com/nauht7l.png
     :width: 100%
+|
 
 Then you will see which tasks are completed, and which ones you can download in
 JSON_ format:
 
-.. image:: http://i.imgur.com/hTgkR3U.png
+|
+.. image:: http://i.imgur.com/pf5O5Tr.png
+|
 
 You could download the results
 also using the API. For example, you could write a small script that gets the list
@@ -1276,9 +1270,8 @@ Exporting the task and task runs to a CSV file
 ----------------------------------------------
 
 While for the CSV_ format, you will get a CSV file that will be automatically
-saved in your computer:
+saved in your computer.
 
-.. image:: http://i.imgur.com/iGPMc9w.png
 
 Exporting the task and task runs to a CKAN server
 -------------------------------------------------
@@ -1287,25 +1280,74 @@ If the server has been configured to allow you to export your aplication's data
 to a CKAN server (see :ref:`config-ckan`), the owner of the project will see another box that will
 give you the option to export the data to the CKAN server.
 
-.. image:: http://i.imgur.com/cAEBjez.png
-    :width: 100%
-
 In order to use this method you will need to add the CKAN API-KEY associated
 with your account, otherwise you will not be able to export the data and
 a warning message will let you know it.
 
 Adding the CKAN API-KEY is really simple. You only need to create an account in
-the supported CKAN server (i.e. `the Data hub`_), check your profile and copy
+the supported CKAN server, check your profile and copy
 the API-KEY. Then, open your PyBossa account page, edit it and paste the key in
 the section **External Services**.
 
-.. image:: http://i.imgur.com/nYw9rcj.png
+|
+.. image:: http://i.imgur.com/xOezl6C.png
+|
 
 Then, you will be able to actually export the data to the CKAN server and host
-it there. Your project will show in the info page at the bottom a link to
-your published data in the CKAN server so other people, citizens or researchers
-can actually cite your work.
+it there. 
 
-.. image:: http://i.imgur.com/98xjH8a.png
 
-.. _`the Data hub`: http://datahub.io
+.. _pybossa-project-results:
+
+Publishing results of your project
+==================================
+
+Since v1.2.0, PyBossa automatically creates "empty" results when a task is completed.
+
+For example, imagine your project is asking the following question in a set of images:
+"Do you see a triangle in this picture?" The possible answers are: yes and no. 
+
+Your project has configured the task redundancy to 5, so 5 people will answer that question 
+for a given image (or task). When the 5th person sends the answer, the server marks the task
+as completed, and it creates a result for the given task associating the answers, the task and
+the project:
+
+.. code-block:: js
+
+    {"id": 1,
+     "project_id": 1,
+     "task_id": 1,
+     "task_run_ids": [1,2,3,4,5],
+     "info": null}
+
+As in other PyBossa domain objects, a result has a JSON field named **info** that allows you
+to store the **final result** for that task using the task_runs 1, 2, 3, 4, 5. Imagine that
+the five volunteers answered: yes, then as you are the project owner you could update the
+info field with that value:
+
+.. code-block:: js
+
+    {"id": 1,
+     "project_id": 1,
+     "task_id": 1,
+     "task_run_ids": [1,2,3,4,5],
+     "info": {"triangle": "yes"}}
+
+The benefit of storing that information is that you can access these data via the PyBossa
+API so you will be able to show the results, in your result project section using the API.
+
+This will allow you to build beautiful visualizations of your results on maps, webgl, etc.
+
+Right now this new feature is evolving, so please contact us if you need help. We'll provide
+result templates soon for our own basic templates.
+
+Keeping track of the time spent by volunteers
+=============================================
+
+Since v1.1.3, PyBossa records a timestamp, for every task run, of the instant
+a volunteer requests a task to contribute to it. This is stored in the "created"
+attribute of the Task Runs.
+
+This allows, together with the "finish_time" attribute, to know how much time
+the volunteer has spent completing the task:
+  (time spent = finish_time - created)

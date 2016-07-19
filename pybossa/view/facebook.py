@@ -1,7 +1,7 @@
 # -*- coding: utf8 -*-
 # This file is part of PyBossa.
 #
-# Copyright (C) 2013 SF Isle of Man Limited
+# Copyright (C) 2015 SciFabric LTD.
 #
 # PyBossa is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as published by
@@ -50,9 +50,9 @@ def get_facebook_token():  # pragma: no cover
 
 
 @blueprint.route('/oauth-authorized')
-@facebook.oauth.authorized_handler
-def oauth_authorized(resp):  # pragma: no cover
+def oauth_authorized():  # pragma: no cover
     """Authorize facebook login."""
+    resp = facebook.oauth.authorized_response()
     next_url = request.args.get('next') or url_for('home.home')
     if resp is None:
         flash(u'You denied the request to sign in.', 'error')
@@ -75,9 +75,9 @@ def oauth_authorized(resp):  # pragma: no cover
 def manage_user(access_token, user_data):
     """Manage the user after signin"""
     user = user_repo.get_by(facebook_user_id=user_data['id'])
+    facebook_token = dict(oauth_token=access_token)
 
     if user is None:
-        facebook_token = dict(oauth_token=access_token)
         info = dict(facebook_token=facebook_token)
         name = username_from_full_name(user_data['name'])
         user_exists = user_repo.get_by_name(name) is not None
@@ -101,6 +101,8 @@ def manage_user(access_token, user_data):
         else:
             return None
     else:
+        user.info['facebook_token'] = facebook_token
+        user_repo.save(user)
         return user
 
 

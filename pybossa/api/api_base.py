@@ -1,7 +1,7 @@
 # -*- coding: utf8 -*-
 # This file is part of PyBossa.
 #
-# Copyright (C) 2013 SF Isle of Man Limited
+# Copyright (C) 2015 SciFabric LTD.
 #
 # PyBossa is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as published by
@@ -28,6 +28,7 @@ This package adds GET, POST, PUT and DELETE methods for any class:
 """
 import json
 from flask import request, abort, Response
+from flask.ext.login import current_user
 from flask.views import MethodView
 from werkzeug.exceptions import NotFound, Unauthorized, Forbidden
 from pybossa.util import jsonpify, crossdomain
@@ -36,7 +37,7 @@ from pybossa.auth import ensure_authorized_to
 from pybossa.hateoas import Hateoas
 from pybossa.ratelimit import ratelimit
 from pybossa.error import ErrorStatus
-from pybossa.core import project_repo, user_repo, task_repo
+from pybossa.core import project_repo, user_repo, task_repo, result_repo
 
 repos = {'Task'   : {'repo': task_repo, 'filter': 'filter_tasks_by',
                      'get': 'get_task', 'save': 'save', 'update': 'update',
@@ -46,11 +47,14 @@ repos = {'Task'   : {'repo': task_repo, 'filter': 'filter_tasks_by',
                      'delete': 'delete'},
         'User'    : {'repo': user_repo, 'filter': 'filter_by', 'get': 'get',
                      'save': 'save', 'update': 'update'},
-        'Project' : {'repo': project_repo, 'filter': 'filter_by', 'get': 'get',
-                     'save': 'save', 'update': 'update', 'delete': 'delete'},
+         'Project' : {'repo': project_repo, 'filter': 'filter_by',
+                      'context': 'filter_owner_by', 'get': 'get',
+                      'save': 'save', 'update': 'update', 'delete': 'delete'},
         'Category': {'repo': project_repo, 'filter': 'filter_categories_by',
                      'get': 'get_category', 'save': 'save_category',
-                     'update': 'update_category', 'delete': 'delete_category'}
+                     'update': 'update_category', 'delete': 'delete_category'},
+        'Result': {'repo': result_repo, 'filter': 'filter_by', 'get': 'get',
+                    'update': 'update'}
         }
 
 
@@ -102,7 +106,7 @@ class APIBase(MethodView):
                 action='GET')
 
     def _create_json_response(self, query_result, oid):
-        if len (query_result) == 1 and query_result[0] is None:
+        if len(query_result) == 1 and query_result[0] is None:
             raise abort(404)
         items = []
         for item in query_result:
@@ -112,9 +116,9 @@ class APIBase(MethodView):
             except (Forbidden, Unauthorized):
                 # Remove last added item, as it is 401 or 403
                 items.pop()
-            except Exception as ex: # pragma: no cover
+            except Exception:  # pragma: no cover
                 raise
-        if oid:
+        if oid is not None:
             ensure_authorized_to('read', query_result[0])
             items = items[0]
         return json.dumps(items)
@@ -143,17 +147,38 @@ class APIBase(MethodView):
             results = [getattr(repo, query_func)(oid)]
         return results
 
+    def api_context(self, all_arg, **filters):
+        if current_user.is_authenticated():
+            filters['owner_id'] = current_user.id
+        if filters.get('owner_id') and all_arg == '1':
+            del filters['owner_id']
+        return filters
+
     def _filter_query(self, repo_info, limit, offset):
         filters = {}
         for k in request.args.keys():
-            if k not in ['limit', 'offset', 'api_key']:
+            if k not in ['limit', 'offset', 'api_key', 'last_id', 'all',
+                         'fulltextsearch', 'desc']:
                 # Raise an error if the k arg is not a column
                 getattr(self.__class__, k)
                 filters[k] = request.args[k]
         repo = repo_info['repo']
+        filters = self.api_context(all_arg=request.args.get('all'), **filters)
         query_func = repo_info['filter']
         filters = self._custom_filter(filters)
-        results = getattr(repo, query_func)(limit=limit, offset=offset, **filters)
+        last_id = request.args.get('last_id')
+        fulltextsearch = request.args.get('fulltextsearch')
+        desc = request.args.get('desc')
+        if last_id:
+            results = getattr(repo, query_func)(limit=limit, last_id=last_id,
+                                                fulltextsearch=fulltextsearch,
+                                                desc=False,
+                                                **filters)
+        else:
+            results = getattr(repo, query_func)(limit=limit, offset=offset,
+                                                fulltextsearch=fulltextsearch,
+                                                desc=desc,
+                                                **filters)
         return results
 
     def _set_limit_and_offset(self):
@@ -279,12 +304,12 @@ class APIBase(MethodView):
         old = self.__class__(**existing.dictize())
         for key in data:
             setattr(existing, key, data[key])
+        self._update_attribute(existing, old)
         update_func = repos[self.__class__.__name__]['update']
         self._validate_instance(existing)
         getattr(repo, update_func)(existing)
         self._log_changes(old, existing)
         return existing
-
 
     def _update_object(self, data_dict):
         """Update object.
@@ -294,6 +319,13 @@ class APIBase(MethodView):
 
         """
         pass
+
+    def _update_attribute(self, new, old):
+        """Update object attribute if new value is passed.
+        Method to be overriden in inheriting classes which wish to update
+        data dict.
+
+        """
 
     def _select_attributes(self, item_data):
         """Method to be overriden in inheriting classes in case it is not
@@ -309,9 +341,9 @@ class APIBase(MethodView):
 
     def _validate_instance(self, instance):
         """Method to be overriden in inheriting classes which may need to
-        validate the creation (POST) or modification (PUT) of a domain object for
-        reasons other than business logic ones (e.g. overlapping of a project
-        name witht a URL).
+        validate the creation (POST) or modification (PUT) of a domain object
+        for reasons other than business logic ones (e.g. overlapping of a
+        project name witht a URL).
         """
         pass
 

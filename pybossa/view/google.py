@@ -1,7 +1,7 @@
 # -*- coding: utf8 -*-
 # This file is part of PyBossa.
 #
-# Copyright (C) 2015 SF Isle of Man Limited
+# Copyright (C) 2015 SciFabric LTD.
 #
 # PyBossa is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as published by
@@ -37,7 +37,7 @@ def login():  # pragma: no cover
     """Login with Google."""
     if request.args.get("next"):
         request_token_params = {
-            'scope': 'https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email',
+            'scope': 'profile email',
             'response_type': 'code'}
         google.oauth.request_token_params = request_token_params
     return google.oauth.authorize(callback=url_for('.oauth_authorized',
@@ -54,9 +54,9 @@ def get_google_token():  # pragma: no cover
 
 
 @blueprint.route('/oauth_authorized')
-@google.oauth.authorized_handler
-def oauth_authorized(resp):  # pragma: no cover
+def oauth_authorized():  # pragma: no cover
     """Authorize Oauth."""
+    resp = google.oauth.authorized_response()
     next_url = url_for('home.home')
 
     if resp is None or request.args.get('error'):
@@ -93,10 +93,10 @@ def manage_user(access_token, user_data):
     # We have to store the oauth_token in the session to get the USER fields
 
     user = user_repo.get_by(google_user_id=user_data['id'])
+    google_token = dict(oauth_token=access_token)
 
     # user never signed on
     if user is None:
-        google_token = dict(oauth_token=access_token)
         info = dict(google_token=google_token)
         name = username_from_full_name(user_data['name'])
         user = user_repo.get_by_name(name)
@@ -116,10 +116,11 @@ def manage_user(access_token, user_data):
         else:
             return None
     else:
+        user.info['google_token'] = google_token
         # Update the name to fit with new paradigm to avoid UTF8 problems
         if type(user.name) == unicode or ' ' in user.name:
             user.name = username_from_full_name(user.name)
-            user_repo.update(user)
+        user_repo.save(user)
         return user
 
 

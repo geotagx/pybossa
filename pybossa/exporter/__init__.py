@@ -1,7 +1,7 @@
 # -*- coding: utf8 -*-
 # This file is part of PyBossa.
 #
-# Copyright (C) 2014 SF Isle of Man Limited
+# Copyright (C) 2015 SciFabric LTD.
 #
 # PyBossa is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as published by
@@ -45,10 +45,9 @@ class Exporter(object):
             assert zlib
             zip_compression= zipfile.ZIP_DEFLATED
         except Exception as ex:
-            print ex
             zip_compression= zipfile.ZIP_STORED
-        zip = zipfile.ZipFile(file=filename, mode='w', compression=zip_compression, allowZip64=True)
-        return zip
+        _zip = zipfile.ZipFile(file=filename, mode='w', compression=zip_compression, allowZip64=True)
+        return _zip
 
     def _make_zip(self, project, ty):
         """Generate a ZIP of a certain type and upload it"""
@@ -66,12 +65,12 @@ class Exporter(object):
             filepath = container
         return filepath
 
-    def download_name(self, project, ty, format):
+    def download_name(self, project, ty, _format):
         """Get the filename (without) path of the file which should be downloaded.
            This function does not check if this filename actually exists!"""
         # TODO: Check if ty is valid
         name = self._project_name_latin_encoded(project)
-        filename = '%s_%s_%s_%s.zip' % (str(project.id), name, ty, format)  # Example: 123_feynman_tasks_json.zip
+        filename = '%s_%s_%s_%s.zip' % (str(project.id), name, ty, _format)  # Example: 123_feynman_tasks_json.zip
         filename = secure_filename(filename)
         return filename
 

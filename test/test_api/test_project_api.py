@@ -1,7 +1,7 @@
 # -*- coding: utf8 -*-
 # This file is part of PyBossa.
 #
-# Copyright (C) 2013 SF Isle of Man Limited
+# Copyright (C) 2015 SciFabric LTD.
 #
 # PyBossa is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as published by
@@ -26,18 +26,45 @@ from factories import (ProjectFactory, TaskFactory, TaskRunFactory, AnonymousTas
 
 from pybossa.repositories import ProjectRepository
 from pybossa.repositories import TaskRepository
+from pybossa.repositories import ResultRepository
 project_repo = ProjectRepository(db)
 task_repo = TaskRepository(db)
+result_repo = ResultRepository(db)
 
 class TestProjectAPI(TestAPI):
+
+    def create_result(self, n_results=1, n_answers=1, owner=None,
+                      filter_by=False):
+        if owner:
+            owner = owner
+        else:
+            owner = UserFactory.create()
+        project = ProjectFactory.create(owner=owner)
+        tasks = []
+        for i in range(n_results):
+            tasks.append(TaskFactory.create(n_answers=n_answers,
+                                            project=project))
+        for i in range(n_answers):
+            for task in tasks:
+                TaskRunFactory.create(task=task, project=project)
+        if filter_by:
+            return result_repo.filter_by(project_id=1)
+        else:
+            return result_repo.get_by(project_id=1)
+
 
     @with_context
     def test_project_query(self):
         """ Test API project query"""
-        ProjectFactory.create(info={'total': 150})
+        project = ProjectFactory.create(updated='2015-01-01T14:37:30.642119', info={'total': 150})
+        projects = ProjectFactory.create_batch(8, info={'total': 150})
+        project = ProjectFactory.create(updated='2019-01-01T14:37:30.642119', info={'total': 150})
+        projects.insert(0, project)
+        projects.append(project)
         res = self.app.get('/api/project')
         data = json.loads(res.data)
-        assert len(data) == 1, data
+        dataNoDesc = data
+        assert len(data) == 10, data
         project = data[0]
         assert project['info']['total'] == 150, data
 
@@ -53,29 +80,103 @@ class TestProjectAPI(TestAPI):
         assert err['exception_cls'] == 'NotFound', err
         assert err['action'] == 'GET', err
 
-
-    def test_hidden_project(self):
-        """ Test API hidden project works. """
-        ProjectFactory.create(hidden=1)
-        res = self.app.get('/api/project')
+        # Limits
+        res = self.app.get("/api/project?limit=5")
         data = json.loads(res.data)
+        assert len(data) == 5, data
 
-        err_msg = "There should be zero projects listed."
-        assert len(data) == 0, err_msg
-        err_msg = "It should return 200 with an empty object"
-        assert res.status_code == 200, err_msg
 
-        # Now we add a second project that it is not hidden
-        ProjectFactory.create(info={'hello': 'world'})
-        res = self.app.get('/api/project')
+        # Keyset pagination
+        url = "/api/project?limit=5&last_id=%s" % (projects[4].id)
+        res = self.app.get(url)
         data = json.loads(res.data)
+        assert len(data) == 5, data
+        assert data[0]['id'] == projects[5].id, data
 
-        err_msg = "There should be only one project listed."
-        assert len(data) == 1, err_msg
-        err_msg = "It should return 200 with one project"
-        assert res.status_code == 200, err_msg
+        # Desc filter
+        url = "/api/project?desc=true"
+        res = self.app.get(url)
+        data = json.loads(res.data)
+        err_msg = "It should get the last item first."
+        assert data[0]['updated'] == projects[len(projects)-1].updated, err_msg
+
+
+    @with_context
+    def test_project_query_with_context(self):
+        """ Test API project query with context."""
+        user = UserFactory.create()
+        project_oc = ProjectFactory.create(owner=user, info={'total': 150})
+        ProjectFactory.create()
+        res = self.app.get('/api/project?api_key=' + user.api_key)
+        data = json.loads(res.data)
+        assert len(data) == 1, len(data)
         project = data[0]
-        assert project['info']['hello'] == 'world', err_msg
+        assert project['info']['total'] == 150, data
+        assert project_oc.id == project['id'], project
+        assert project['owner_id'] == user.id, project
+
+        res = self.app.get('/api/project?api_key=' + user.api_key + '&offset=1')
+        data = json.loads(res.data)
+        assert len(data) == 0, data
+
+        # The output should have a mime-type: application/json
+        assert res.mimetype == 'application/json', res
+
+        # Test a non-existant ID
+        res = self.app.get('/api/project/0?api_key=' + user.api_key)
+        err = json.loads(res.data)
+        assert res.status_code == 404, err
+        assert err['status'] == 'failed', err
+        assert err['target'] == 'project', err
+        assert err['exception_cls'] == 'NotFound', err
+        assert err['action'] == 'GET', err
+
+        # Limits
+        user_two = UserFactory.create()
+        projects = ProjectFactory.create_batch(9, owner=user)
+        res = self.app.get("/api/project?limit=5&api_key=" + user.api_key)
+        data = json.loads(res.data)
+        assert len(data) == 5, data
+        for d in data:
+            d['owner_id'] == user.id, d
+
+        res = self.app.get("/api/project?limit=5&api_key=" + user_two.api_key)
+        data = json.loads(res.data)
+        assert len(data) == 0, data
+
+        res = self.app.get("/api/project?all=1&limit=5&api_key=" + user_two.api_key)
+        data = json.loads(res.data)
+        assert len(data) == 5, data
+        for d in data:
+            d['owner_id'] == user.id, d
+
+
+        # Keyset pagination
+        url = "/api/project?limit=5&last_id=%s&api_key=%s" % (projects[3].id,
+                                                              user.api_key)
+        res = self.app.get(url)
+        data = json.loads(res.data)
+        assert len(data) == 5, len(data)
+        assert data[0]['id'] == projects[4].id, data
+        for d in data:
+            d['owner_id'] == user.id, d
+
+        # Keyset pagination
+        url = "/api/project?limit=5&last_id=%s&api_key=%s" % (projects[3].id,
+                                                              user_two.api_key)
+        res = self.app.get(url)
+        data = json.loads(res.data)
+        assert len(data) == 0, data
+
+        # Keyset pagination
+        url = "/api/project?all=1&limit=5&last_id=%s&api_key=%s" % (projects[3].id,
+                                                                    user_two.api_key)
+        res = self.app.get(url)
+        data = json.loads(res.data)
+        assert len(data) == 5, data
+        assert data[0]['id'] == projects[4].id, data
+        for d in data:
+            d['owner_id'] == user.id, d
 
 
     @with_context
@@ -103,6 +204,79 @@ class TestProjectAPI(TestAPI):
         # Correct result
         assert data[0]['short_name'] == 'test-app', data
         assert data[0]['name'] == 'My New Project', data
+
+
+    @with_context
+    def test_query_project_with_context(self):
+        """Test API query for project endpoint with context works"""
+        user = UserFactory.create()
+        user_two = UserFactory.create()
+        project_oc = ProjectFactory.create(owner=user, short_name='test-app',
+                                           name='My New Project')
+        ProjectFactory.create()
+        # Test for real field
+        url = "/api/project?short_name=test-app&api_key=" + user.api_key
+        res = self.app.get(url, follow_redirects=True)
+        data = json.loads(res.data)
+        # Should return one result
+        assert len(data) == 1, data
+        # Correct result
+        assert data[0]['short_name'] == 'test-app', data
+        assert data[0]['owner_id'] == user.id, data[0]
+
+        # Test for real field
+        url = "/api/project?short_name=test-app&api_key=" + user_two.api_key
+        res = self.app.get(url, follow_redirects=True)
+        data = json.loads(res.data)
+        # Should return zero result
+        assert len(data) == 0, data
+
+        # Test for real field
+        url = "/api/project?all=1&short_name=test-app&api_key=" + user_two.api_key
+        res = self.app.get(url, follow_redirects=True)
+        data = json.loads(res.data)
+        # Should return one result
+        assert len(data) == 1, data
+        # Correct result
+        assert data[0]['short_name'] == 'test-app', data
+        assert data[0]['owner_id'] == user.id, data[0]
+
+
+        # Valid field but wrong value
+        url = "/api/project?short_name=wrongvalue&api_key=" + user.api_key
+        res = self.app.get(url)
+        data = json.loads(res.data)
+        assert len(data) == 0, data
+
+        # Multiple fields
+        url = '/api/project?short_name=test-app&name=My New Project&api_key=' + user.api_key
+        res = self.app.get(url)
+        data = json.loads(res.data)
+        # One result
+        assert len(data) == 1, data
+        # Correct result
+        assert data[0]['short_name'] == 'test-app', data
+        assert data[0]['name'] == 'My New Project', data
+        assert data[0]['owner_id'] == user.id, data
+
+        # Multiple fields
+        url = '/api/project?short_name=test-app&name=My New Project&api_key=' + user_two.api_key
+        res = self.app.get(url)
+        data = json.loads(res.data)
+        # Zero result
+        assert len(data) == 0, data
+
+        # Multiple fields
+        url = '/api/project?all=1&short_name=test-app&name=My New Project&api_key=' + user_two.api_key
+        res = self.app.get(url)
+        data = json.loads(res.data)
+        # One result
+        assert len(data) == 1, data
+        # Correct result
+        assert data[0]['short_name'] == 'test-app', data
+        assert data[0]['name'] == 'My New Project', data
+        assert data[0]['owner_id'] == user.id, data
+
 
 
     @with_context
@@ -279,7 +453,6 @@ class TestProjectAPI(TestAPI):
         assert err['status'] == 'failed', err
         assert err['action'] == 'PUT', err
         assert err['exception_cls'] == 'DBIntegrityError', err
-
 
         # With not JSON data
         datajson = data
@@ -646,7 +819,6 @@ class TestProjectAPI(TestAPI):
         res = self.app.get(url)
         assert res.data == '{}', res.data
 
-
     @patch('pybossa.repositories.project_repository.uploader')
     def test_project_delete_deletes_zip_files(self, uploader):
         """Test API project delete deletes also zip files of tasks and taskruns"""
@@ -695,3 +867,55 @@ class TestProjectAPI(TestAPI):
         assert res.status_code == 400, res.status_code
         error = json.loads(res.data)
         assert error['exception_msg'] == "Reserved keys in payload", error
+
+    def test_project_post_with_published_attribute_is_forbidden(self):
+        user = UserFactory.create()
+        data = dict(
+            name='name',
+            short_name='name',
+            description='description',
+            owner_id=user.id,
+            long_description=u'Long Description\n================',
+            info={'task_presenter': '<div>'},
+            published=True)
+        data = json.dumps(data)
+
+        res = self.app.post('/api/project?api_key=' + user.api_key, data=data)
+
+        error_msg = json.loads(res.data)['exception_msg']
+        assert res.status_code == 403, res.status_code
+        assert error_msg == 'You cannot publish a project via the API', res.data
+
+    def test_project_update_with_published_attribute_is_forbidden(self):
+        user = UserFactory.create()
+        project = ProjectFactory.create(owner=user)
+        data = dict(published=True)
+        data = json.dumps(data)
+        url = '/api/project/%s?api_key=%s' % (project.id, user.api_key)
+
+        res = self.app.put(url, data=data)
+        print res.data
+        error_msg = json.loads(res.data)['exception_msg']
+        assert res.status_code == 403, res.status_code
+        assert error_msg == 'You cannot publish a project via the API', res.data
+
+    def test_project_delete_with_results(self):
+        """Test API delete project with results cannot be deleted."""
+        result = self.create_result()
+        project = project_repo.get(result.project_id)
+        url = '/api/project/%s?api_key=%s' % (result.project_id,
+                                              project.owner.api_key)
+
+        res = self.app.delete(url)
+        assert_equal(res.status, '403 FORBIDDEN', res.status)
+
+    def test_project_delete_with_results_var(self):
+        """Test API delete project with results cannot be deleted by admin."""
+        root = UserFactory.create(admin=True)
+        result = self.create_result()
+        project = project_repo.get(result.project_id)
+
+        url = '/api/project/%s?api_key=%s' % (result.project_id,
+                                              root.api_key)
+        res = self.app.delete(url)
+        assert_equal(res.status, '403 FORBIDDEN', res.status)

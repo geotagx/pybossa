@@ -1,4 +1,6 @@
+# -*- coding: utf8 -*-
 SERVER_NAME='localhost'
+# THEME='crowdcrafting-theme'
 SECRET = 'foobar'
 SECRET_KEY = 'my-session-secret'
 SQLALCHEMY_DATABASE_TEST_URI = 'postgresql://rtester:rtester@localhost/pybossa_test'
@@ -20,12 +22,13 @@ MAIL_PORT = 25
 MAIL_FAIL_SILENTLY = False
 MAIL_DEFAULT_SENDER = 'PyBossa Support <info@pybossa.com>'
 ANNOUNCEMENT = {'admin': 'Root Message', 'user': 'User Message', 'owner': 'Owner Message'}
-LOCALES = ['en', 'es', 'fr']
+LOCALES = [('en', 'English'), ('es', u'Español'),
+           ('it', 'Italiano'), ('fr', u'Français'),
+           ('ja', u'日本語'), ('el', u'ελληνικά')]
 ENFORCE_PRIVACY = False
 REDIS_CACHE_ENABLED = False
 REDIS_SENTINEL = [('localhost', 26379)]
 REDIS_KEYPREFIX = 'pybossa_cache'
-LOCALES = ['en', 'es', 'fr']
 WTF_CSRF_ENABLED = False
 TESTING = True
 CSRF_ENABLED = False
@@ -44,5 +47,7 @@ RACKSPACE_REGION = 'ORD'
 FLICKR_API_KEY = 'apikey'
 FLICKR_SHARED_SECRET = "secret"
 DROPBOX_APP_KEY = 'key'
+YOUTUBE_API_SERVER_KEY = 'apikey'
 LIMIT = 25
 PER = 15 * 60
+SSE = True

@@ -1,7 +1,7 @@
 # -*- coding: utf8 -*-
 # This file is part of PyBossa.
 #
-# Copyright (C) 2013 SF Isle of Man Limited
+# Copyright (C) 2015 SciFabric LTD.
 #
 # PyBossa is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as published by
@@ -25,4 +25,5 @@ class TestAuthentication(Test):
         """Test AUTHENTICATION works"""
         self.create()
         res = self.app.get('/?api_key=%s' % self.api_key)
+        assert '<a href="/account/signout"' in res.data, res.data
         assert 'checkpoint::logged-in::tester' in res.data, res.data

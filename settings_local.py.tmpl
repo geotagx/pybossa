@@ -37,7 +37,7 @@ ITSDANGEROUSKEY = 'its-dangerous-key'
 ## project configuration
 BRAND = 'PyBossa'
 TITLE = 'PyBossa'
-LOGO = 'default_logo.png'
+LOGO = 'default_logo.svg'
 COPYRIGHT = 'Set Your Institution'
 DESCRIPTION = 'Set the description in your config'
 TERMSOFUSE = 'http://okfn.org/terms-of-use/'
@@ -57,8 +57,14 @@ CONTACT_TWITTER = 'PyBossa'
 # GOOGLE_CLIENT_SECRET=''
 
 ## Supported Languages
+## NOTE: You need to create a symbolic link to the translations folder, otherwise
+## this wont work.
+## ln -s pybossa/themes/your-theme/translations pybossa/translations
+#DEFAULT_LOCALE = 'en'
+#LOCALES = [('en', 'English'), ('es', u'Español'),
+#           ('it', 'Italiano'), ('fr', u'Français'),
+#           ('ja', u'日本語'),('pt_BR','Brazilian Portuguese')]
 
-LOCALES = ['en', 'es', 'fr']
 
 ## list of administrator emails to which error emails get sent
 # ADMINS = ['me@sysadmin.org']
@@ -149,5 +155,37 @@ ACCOUNT_CONFIRMATION_DISABLED = True
 # FLICKR_API_KEY = 'your-key'
 # FLICKR_SHARED_SECRET = 'your-secret'
 
-# DROPBOX APP KEY
+# Dropbox app key
 # DROPBOX_APP_KEY = 'your-key'
+
+# Send emails weekly update every
+# WEEKLY_UPDATE_STATS = 'Sunday'
+
+# Youtube API server key
+# YOUTUBE_API_SERVER_KEY = 'your-key'
+
+# Enable Server Sent Events
+# WARNING: this will require to run PyBossa in async mode. Check the docs.
+# WARNING: if you don't enable async when serving PyBossa, the server will lock
+# WARNING: and it will not work. For this reason, it's disabled by default.
+# SSE = False
+
+# Add here any other ATOM feed that you want to get notified.
+NEWS_URL = ['https://github.com/pybossa/enki/releases.atom', 
+            'https://github.com/pybossa/pybossa-client/releases.atom',
+            'https://github.com/pybossa/pbs/releases.atom']
+
+# Pro user features. False will make the feature available to all regular users,
+# while True will make it available only to pro users
+PRO_FEATURES = {
+    'auditlog':              True,
+    'webhooks':              True,
+    'updated_exports':       True,
+    'notify_blog_updates':   True,
+    'project_weekly_report': True,
+    'autoimporter':          True,
+    'better_stats':          True
+}
+
+# Libsass style. You can use nested, expanded, compact and compressed
+LIBSASS_STYLE = 'compressed'

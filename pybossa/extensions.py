@@ -1,7 +1,7 @@
 # -*- coding: utf8 -*-
 # This file is part of PyBossa.
 #
-# Copyright (C) 2015 SF Isle of Man Limited
+# Copyright (C) 2015 SciFabric LTD.
 #
 # PyBossa is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as published by
@@ -31,13 +31,14 @@ The objects are:
     * uploader: for file uploads support,
     * csrf: for CSRF protection
     * newsletter: for subscribing users to Mailchimp newsletter
+    * assets: for assets management (SASS, etc.)
 
 """
 __all__ = ['sentinel', 'db', 'signer', 'mail', 'login_manager', 'facebook',
            'twitter', 'google', 'misaka', 'babel', 'uploader', 'debug_toolbar',
            'csrf', 'timeouts', 'ratelimits', 'user_repo', 'project_repo',
            'task_repo', 'blog_repo', 'auditlog_repo', 'newsletter', 'importer',
-           'flickr', 'plugin_manager']
+           'flickr', 'plugin_manager', 'assets']
 
 # CACHE
 from pybossa.sentinel import Sentinel
@@ -71,15 +72,18 @@ login_manager = LoginManager()
 from flask.ext.debugtoolbar import DebugToolbarExtension
 debug_toolbar = DebugToolbarExtension()
 
-# Social Networks
-from pybossa.util import Facebook
+# OAuth providers
+from pybossa.oauth_providers import Facebook
 facebook = Facebook()
 
-from pybossa.util import Twitter
+from pybossa.oauth_providers import Twitter
 twitter = Twitter()
 
-from pybossa.util import Google
+from pybossa.oauth_providers import Google
 google = Google()
+
+from pybossa.oauth_providers import Flickr
+flickr = Flickr()
 
 # Markdown support
 from flask.ext.misaka import Misaka
@@ -114,9 +118,8 @@ newsletter = Newsletter()
 from importers import Importer
 importer = Importer()
 
-# Flickr OAuth integration for importer
-from pybossa.flickr_service import FlickrService
-flickr = FlickrService()
-
 from flask.ext.plugins import PluginManager
 plugin_manager = PluginManager()
+
+from flask.ext.assets import Environment
+assets = Environment()

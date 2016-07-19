@@ -1,7 +1,7 @@
 # -*- coding: utf8 -*-
 # This file is part of PyBossa.
 #
-# Copyright (C) 2014 SF Isle of Man Limited
+# Copyright (C) 2015 SciFabric LTD.
 #
 # PyBossa is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as published by
@@ -21,6 +21,8 @@ from pybossa.cache import projects as cached_projects
 from factories import UserFactory, ProjectFactory, TaskFactory, \
     TaskRunFactory, AnonymousTaskRunFactory
 from mock import patch
+import datetime
+from pybossa.core import result_repo
 
 
 class TestProjectsCache(Test):
@@ -33,8 +35,8 @@ class TestProjectsCache(Test):
         return project
 
     def create_project_with_contributors(self, anonymous, registered,
-                                     two_tasks=False, name='my_app', hidden=0):
-        project = ProjectFactory.create(name=name, hidden=hidden)
+                                     two_tasks=False, name='my_app', info={}):
+        project = ProjectFactory.create(name=name, info=info)
         task = TaskFactory(project=project)
         if two_tasks:
             task2 = TaskFactory(project=project)
@@ -52,16 +54,6 @@ class TestProjectsCache(Test):
         return project
 
 
-    def test_get_featured(self):
-        """Test CACHE PROJECTS get_featured returns featured projects"""
-
-        ProjectFactory.create(featured=True)
-
-        featured = cached_projects.get_featured()
-
-        assert len(featured) is 1, featured
-
-
     def test_get_featured_only_returns_featured(self):
         """Test CACHE PROJECTS get_featured returns only featured projects"""
 
@@ -73,23 +65,13 @@ class TestProjectsCache(Test):
         assert len(featured) is 1, featured
 
 
-    def test_get_featured_not_returns_hidden_projects(self):
-        """Test CACHE PROJECTS get_featured does not return hidden projects"""
-
-        featured_project = ProjectFactory.create(hidden=1, featured=True)
-
-        featured = cached_projects.get_featured()
-
-        assert len(featured) is 0, featured
-
-
     def test_get_featured_returns_required_fields(self):
         """Test CACHE PROJECTS get_featured returns the required info
         about each featured project"""
 
         fields = ('id', 'name', 'short_name', 'info', 'created', 'description',
                   'last_activity', 'last_activity_raw', 'overall_progress',
-                   'n_tasks', 'n_volunteers', 'owner', 'info')
+                  'n_tasks', 'n_volunteers', 'owner', 'info', 'updated')
 
         ProjectFactory.create(featured=True)
 
@@ -99,44 +81,31 @@ class TestProjectsCache(Test):
             assert featured.has_key(field), "%s not in project info" % field
 
 
-    def test_get_category(self):
-        """Test CACHE PROJECTS get returns projects from given category"""
+    def test_get_only_return_published(self):
+        """Test CACHE PROJECTS get returns only published projects"""
 
-        project = self.create_project_with_tasks(1, 0)
-
+        project = ProjectFactory.create(published=True)
+        ProjectFactory.create(category=project.category, published=False)
         projects = cached_projects.get(project.category.short_name)
 
         assert len(projects) is 1, projects
 
 
-    def test_get_only_returns_category_projects(self):
+    def test_get_dont_return_projects_with_password(self):
+        """Test CACHE PROJECTS get does not return projects with a password"""
+
+        project = ProjectFactory.create(published=True, info={'passwd_hash': '2'})
+        ProjectFactory.create(category=project.category, published=True)
+        projects = cached_projects.get(project.category.short_name)
+
+        assert len(projects) is 1, projects
+
+
+    def test_get_only_returns_projects_from_category(self):
         """Test CACHE PROJECTS get returns only projects from required category"""
 
-        project = self.create_project_with_tasks(1, 0)
-        #create a non published project too
-        ProjectFactory.create()
-
-        projects = cached_projects.get(project.category.short_name)
-
-        assert len(projects) is 1, projects
-
-
-    def test_get_not_returns_hidden_projects(self):
-        """Test CACHE PROJECTS get does not return hidden projects"""
-
-        project = self.create_project_with_contributors(1, 0, hidden=1)
-
-        projects = cached_projects.get(project.category.short_name)
-
-        assert len(projects) is 0, projects
-
-
-    def test_get_not_returns_draft_projects(self):
-        """Test CACHE PROJECTS get does not return draft (non-published) projects"""
-
-        project = self.create_project_with_contributors(1, 0)
-        # Create a project wothout presenter
-        ProjectFactory.create(info={}, category=project.category)
+        project = ProjectFactory.create(published=True)
+        ProjectFactory.create(published=True)
 
         projects = cached_projects.get(project.category.short_name)
 
@@ -149,9 +118,9 @@ class TestProjectsCache(Test):
 
         fields = ('id', 'name', 'short_name', 'info', 'created', 'description',
                   'last_activity', 'last_activity_raw', 'overall_progress',
-                   'n_tasks', 'n_volunteers', 'owner', 'info')
+                  'n_tasks', 'n_volunteers', 'owner', 'info', 'updated')
 
-        project = self.create_project_with_tasks(1, 0)
+        project = ProjectFactory.create(published=True)
 
         retrieved_project = cached_projects.get(project.category.short_name)[0]
 
@@ -159,33 +128,10 @@ class TestProjectsCache(Test):
             assert retrieved_project.has_key(field), "%s not in project info" % field
 
 
-    def test_get_draft(self):
-        """Test CACHE PROJECTS get_draft returns draft_projects"""
-        # Here, we are suposing that a project is draft iff has no presenter AND has no tasks
-
-        ProjectFactory.create(info={})
-
-        drafts = cached_projects.get_draft()
-
-        assert len(drafts) is 1, drafts
-
-
-    def test_get_draft_not_returns_hidden_projects(self):
-        """Test CACHE PROJECTS get_draft does not return hidden projects"""
-
-        ProjectFactory.create(info={}, hidden=1)
-
-        drafts = cached_projects.get_draft()
-
-        assert len(drafts) is 0, drafts
-
-
     def test_get_draft_not_returns_published_projects(self):
-        """Test CACHE PROJECTS get_draft does not return projects with either tasks or a presenter (REVIEW DEFINITION OF A DRAFT PROJECT REQUIRED)"""
+        """Test CACHE PROJECTS get_draft does not return published projects"""
 
-        project_no_presenter = ProjectFactory.create(info={})
-        TaskFactory.create(project=project_no_presenter)
-        project_no_task = ProjectFactory.create()
+        published = ProjectFactory.create(published=True)
 
         drafts = cached_projects.get_draft()
 
@@ -198,9 +144,9 @@ class TestProjectsCache(Test):
 
         fields = ('id', 'name', 'short_name', 'info', 'created', 'description',
                   'last_activity', 'last_activity_raw', 'overall_progress',
-                   'n_tasks', 'n_volunteers', 'owner', 'info')
+                  'n_tasks', 'n_volunteers', 'owner', 'info', 'updated')
 
-        ProjectFactory.create(info={})
+        ProjectFactory.create(published=False)
 
         draft = cached_projects.get_draft()[0]
 
@@ -230,40 +176,23 @@ class TestProjectsCache(Test):
         ranked_3_project = self.create_project_with_contributors(8, 0, name='three')
         ranked_2_project = self.create_project_with_contributors(9, 0, name='two')
         ranked_1_project = self.create_project_with_contributors(10, 0, name='one')
-        ranked_4_project = self.create_project_with_contributors(7, 0, name='four')
 
         top_projects = cached_projects.get_top(n=2)
 
         assert len(top_projects) is 2, len(top_projects)
 
 
-    def test_get_top_returns_four_projects_by_default(self):
-        """Test CACHE PROJECTS get_top returns the top 4 projects by default"""
+    def test_get_top_returns_only_projects_without_password(self):
+        """Test CACHE PROJECTS get_top returns projects that don't have a password"""
 
-        ranked_3_project = self.create_project_with_contributors(8, 0, name='three')
         ranked_2_project = self.create_project_with_contributors(9, 0, name='two')
-        ranked_1_project = self.create_project_with_contributors(10, 0, name='one')
-        ranked_4_project = self.create_project_with_contributors(7, 0, name='four')
-        ranked_5_project = self.create_project_with_contributors(7, 0, name='five')
+        ranked_1_project = self.create_project_with_contributors(
+            10, 0, name='one', info={'passwd_hash': 'something'})
 
         top_projects = cached_projects.get_top()
 
-        assert len(top_projects) is 4, len(top_projects)
+        assert len(top_projects) is 1, len(top_projects)
 
-
-    def test_get_top_doesnt_return_hidden_projects(self):
-        """Test CACHE PROJECTS get_top does not return projects that are hidden"""
-
-        ranked_3_project = self.create_project_with_contributors(8, 0, name='three')
-        ranked_2_project = self.create_project_with_contributors(9, 0, name='two')
-        ranked_1_project = self.create_project_with_contributors(10, 0, name='one')
-        hidden_project = self.create_project_with_contributors(11, 0, name='hidden', hidden=1)
-
-        top_projects = cached_projects.get_top()
-
-        assert len(top_projects) is 3, len(top_projects)
-        for project in top_projects:
-            assert project['name'] != 'hidden', project['name']
 
     def test_n_completed_tasks_no_completed_tasks(self):
         """Test CACHE PROJECTS n_completed_tasks returns 0 if no completed tasks"""
@@ -295,6 +224,42 @@ class TestProjectsCache(Test):
 
         err_msg = "Completed tasks is %s, it should be 4" % completed_tasks
         assert completed_tasks == 4, err_msg
+
+
+    def test_n_tasks_returns_number_of_total_tasks(self):
+        project = self.create_project_with_tasks(completed_tasks=1, ongoing_tasks=1)
+
+        tasks = cached_projects.n_tasks(project.id)
+
+        assert tasks == 2, tasks
+
+
+    def test_n_task_runs_returns_number_of_total_taskruns(self):
+        project = self.create_project_with_contributors(anonymous=1, registered=1)
+
+        taskruns = cached_projects.n_task_runs(project.id)
+
+        assert taskruns == 2, taskruns
+
+
+    def test_n_results_returns_number_of_total_results(self):
+        project = ProjectFactory.create()
+        task = TaskFactory.create(n_answers=1, project=project)
+        TaskRunFactory.create(task=task, project=project)
+
+        results = cached_projects.n_results(project.id)
+
+        assert results == 0, results
+
+        result = result_repo.get_by(project_id=project.id)
+
+        result.info = dict(foo='bar')
+
+        result_repo.update(result)
+
+        results = cached_projects.n_results(project.id)
+
+        assert results == 1, results
 
 
     def test_n_registered_volunteers(self):
@@ -354,10 +319,7 @@ class TestProjectsCache(Test):
 
     def test_n_draft_no_drafts(self):
         """Test CACHE PROJECTS _n_draft returns 0 if there are no draft projects"""
-        # Here, we are suposing that a project is draft iff has no presenter AND has no tasks
-
-        project = ProjectFactory.create(info={})
-        TaskFactory.create_batch(2, project=project)
+        project = ProjectFactory.create(published=True)
 
         number_of_drafts = cached_projects._n_draft()
 
@@ -366,9 +328,7 @@ class TestProjectsCache(Test):
 
     def test_n_draft_with_drafts(self):
         """Test CACHE PROJECTS _n_draft returns 2 if there are 2 draft projects"""
-        # Here, we are suposing that a project is draft iff has no presenter AND has no tasks
-
-        ProjectFactory.create_batch(2, info={})
+        ProjectFactory.create_batch(2, published=False)
 
         number_of_drafts = cached_projects._n_draft()
 
@@ -398,7 +358,7 @@ class TestProjectsCache(Test):
         assert len(browse_tasks) == 2, browse_tasks
 
 
-    def test_browse_tasks_returns_tasks(self):
+    def test_browse_tasks_returns_required_attributes(self):
         """Test CACHE PROJECTS browse_tasks returns a list with objects
         with the required task attributes"""
 
@@ -488,9 +448,20 @@ class TestProjectsCache(Test):
     def test_n_count_with_published_projects(self):
         """Test CACHE PROJECTS n_count returns the number of published projects
         of a given category"""
-        project = self.create_project_with_tasks(1, 0)
-        #create a non published project too
-        ProjectFactory.create()
+        project = ProjectFactory.create(published=True)
+        ProjectFactory.create(published=True)
+        ProjectFactory.create(category=project.category, published=False)
+
+        n_projects = cached_projects.n_count(project.category.short_name)
+
+        assert n_projects == 1, n_projects
+
+
+    def test_n_count_with_password_protected_projects(self):
+        """Test CACHE PROJECTS n_count returns the number of published projects
+        of a given category, excluding projects with a password"""
+        project = ProjectFactory.create(published=True, info={'passwd_hash': '2'})
+        ProjectFactory.create(category=project.category, published=True)
 
         n_projects = cached_projects.n_count(project.category.short_name)
 
@@ -531,3 +502,72 @@ class TestProjectsCache(Test):
 
         for field in fields:
             assert field in pro_owned_projects[0].keys(), field
+
+
+    def test_overall_progress_returns_0_if_no_tasks(self):
+        project = ProjectFactory.create()
+
+        progress = cached_projects.overall_progress(project.id)
+
+        assert progress == 0, progress
+
+
+    def test_overall_progres_returns_actual_progress_percentage(self):
+        total_tasks = 4
+        completed_tasks = 2
+        project = self.create_project_with_tasks(
+                            completed_tasks=completed_tasks,
+                            ongoing_tasks=total_tasks-completed_tasks)
+
+        progress = cached_projects.overall_progress(project.id)
+
+        assert progress == 50, progress
+
+
+    def test_last_activity_returns_None_if_no_contributions(self):
+        project = ProjectFactory.create()
+
+        activity = cached_projects.last_activity(project.id)
+
+        assert activity is None, activity
+
+
+    def test_last_activity_returns_date_of_latest_contribution(self):
+        project = ProjectFactory.create()
+        first_task_run = TaskRunFactory.create(project=project)
+        last_task_run = TaskRunFactory.create(project=project)
+
+        activity = cached_projects.last_activity(project.id)
+
+        assert activity == last_task_run.finish_time, last_task_run
+
+
+    def test_n_published_counts_published_projects(self):
+        published_project = ProjectFactory.create_batch(2, published=True)
+        ProjectFactory.create(published=False)
+
+        number_of_published = cached_projects.n_published()
+
+        assert number_of_published == 2, number_of_published
+
+
+    def test_average_contribution_time_returns_0_if_no_contributions(self):
+        project = ProjectFactory.create()
+
+        average_time = cached_projects.average_contribution_time(project.id)
+
+        assert average_time == 0, average_time
+
+    def test_average_contribution_time_returns_average_contribution_time(self):
+        project = ProjectFactory.create()
+        task = TaskFactory.create(project=project)
+        first_task_time = datetime.timedelta(0, 5)
+        second_task_time = datetime.timedelta(0, 7)
+        expected_average_time = datetime.timedelta(0, 6)
+        now = datetime.datetime.utcnow()
+        TaskRunFactory.create(task=task, created=now, finish_time=now+first_task_time)
+        TaskRunFactory.create(task=task, created=now, finish_time=now+second_task_time)
+
+        average_time = cached_projects.average_contribution_time(project.id)
+
+        assert average_time == expected_average_time, average_time

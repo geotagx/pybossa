@@ -1,7 +1,7 @@
 # -* -coding: utf8 -*-
 # This file is part of PyBossa.
 #
-# Copyright (C) 2013 SF Isle of Man Limited
+# Copyright (C) 2015 SciFabric LTD.
 #
 # PyBossa is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as published by
@@ -16,6 +16,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with PyBossa.  If not, see <http://www.gnu.org/licenses/>.
 """Admin view for PyBossa."""
+from rq import Queue
 from flask import Blueprint
 from flask import render_template
 from flask import request
@@ -28,26 +29,27 @@ from flask import Response
 from flask.ext.login import login_required, current_user
 from flask.ext.babel import gettext
 from werkzeug.exceptions import HTTPException
-from datetime import datetime
-from sqlalchemy.exc import ProgrammingError, InternalError
-from sqlalchemy.sql import text
+from sqlalchemy.exc import ProgrammingError
 
 from pybossa.model.category import Category
 from pybossa.util import admin_required, UnicodeWriter
 from pybossa.cache import projects as cached_projects
 from pybossa.cache import categories as cached_cat
 from pybossa.auth import ensure_authorized_to
-from pybossa.core import db, project_repo, user_repo
-from pybossa.view.account import get_update_feed
-from pybossa import dashboard as dashb
+from pybossa.core import project_repo, user_repo, sentinel
+from pybossa.feed import get_update_feed
+import pybossa.dashboard.data as dashb
+from pybossa.jobs import get_dashboard_jobs
 import json
 from StringIO import StringIO
 
 from pybossa.forms.admin_view_forms import *
+from pybossa.news import NOTIFY_ADMIN
 
 
 blueprint = Blueprint('admin', __name__)
 
+DASHBOARD_QUEUE = Queue('super', connection=sentinel.master)
 
 def format_error(msg, status_code):
     """Return error as a JSON response."""
@@ -62,6 +64,8 @@ def format_error(msg, status_code):
 @admin_required
 def index():
     """List admin actions."""
+    key = NOTIFY_ADMIN + str(current_user.id)
+    sentinel.master.delete(key)
     return render_template('/admin/index.html')
 
 
@@ -366,9 +370,17 @@ def update_category(id):
 def dashboard():
     """Show PyBossa Dashboard."""
     try:
+        if request.args.get('refresh') == '1':
+            db_jobs = get_dashboard_jobs()
+            for j in db_jobs:
+                DASHBOARD_QUEUE.enqueue(j['name'])
+            msg = gettext('Dashboard jobs enqueued,'
+                          ' refresh page in a few minutes')
+            flash(msg)
         active_users_last_week = dashb.format_users_week()
         active_anon_last_week = dashb.format_anon_week()
-        new_projects_last_week = dashb.format_new_projects()
+        draft_projects_last_week = dashb.format_draft_projects()
+        published_projects_last_week = dashb.format_published_projects()
         update_projects_last_week = dashb.format_update_projects()
         new_tasks_week = dashb.format_new_tasks()
         new_task_runs_week = dashb.format_new_task_runs()
@@ -376,20 +388,24 @@ def dashboard():
         returning_users_week = dashb.format_returning_users()
         update_feed = get_update_feed()
 
-        return render_template('admin/dashboard.html',
-                               title=gettext('Dashboard'),
-                               active_users_last_week=active_users_last_week,
-                               active_anon_last_week=active_anon_last_week,
-                               new_projects_last_week=new_projects_last_week,
-                               update_projects_last_week=update_projects_last_week,
-                               new_tasks_week=new_tasks_week,
-                               new_task_runs_week=new_task_runs_week,
-                               new_users_week=new_users_week,
-                               returning_users_week=returning_users_week,
-                               update_feed=update_feed,
-                               wait=False)
-    except ProgrammingError:
-        db.slave_session.rollback()
+        return render_template(
+            'admin/dashboard.html',
+            title=gettext('Dashboard'),
+            active_users_last_week=active_users_last_week,
+            active_anon_last_week=active_anon_last_week,
+            draft_projects_last_week=draft_projects_last_week,
+            published_projects_last_week=published_projects_last_week,
+            update_projects_last_week=update_projects_last_week,
+            new_tasks_week=new_tasks_week,
+            new_task_runs_week=new_task_runs_week,
+            new_users_week=new_users_week,
+            returning_users_week=returning_users_week,
+            update_feed=update_feed,
+            wait=False)
+    except ProgrammingError as e:
         return render_template('admin/dashboard.html',
                                title=gettext('Dashboard'),
                                wait=True)
+    except Exception as e:  # pragma: no cover
+        current_app.logger.error(e)
+        return abort(500)

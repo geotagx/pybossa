@@ -1,7 +1,7 @@
 # -*- coding: utf8 -*-
 # This file is part of PyBossa.
 #
-# Copyright (C) 2015 SF Isle of Man Limited
+# Copyright (C) 2015 SciFabric LTD.
 #
 # PyBossa is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as published by
@@ -16,14 +16,13 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with PyBossa.  If not, see <http://www.gnu.org/licenses/>.
 """Module with PyBossa utils."""
-from datetime import timedelta
+from datetime import timedelta, datetime
 from functools import update_wrapper
 import csv
 import codecs
 import cStringIO
 from flask import abort, request, make_response, current_app
 from functools import wraps
-from flask_oauthlib.client import OAuth
 from flask.ext.login import current_user
 from math import ceil
 import json
@@ -107,7 +106,6 @@ def pretty_date(time=False):
     pretty string like 'an hour ago', 'Yesterday', '3 months ago',
     'just now', etc.
     """
-    from datetime import datetime
     import dateutil.parser
     now = datetime.now()
     if type(time) is str or type(time) is unicode:
@@ -194,75 +192,6 @@ class Pagination(object):
                 last = num
 
 
-class Twitter(object):
-
-    """Class Twitter to enable Twitter signin."""
-
-    def __init__(self, app=None):
-        """Init method."""
-        self.app = app
-        if app is not None:  # pragma: no cover
-            self.init_app(app)
-
-    def init_app(self, app):
-        """Init app using factories."""
-        self.oauth = OAuth().remote_app(
-            'twitter',
-            base_url='https://api.twitter.com/1/',
-            request_token_url='https://api.twitter.com/oauth/request_token',
-            access_token_url='https://api.twitter.com/oauth/access_token',
-            authorize_url='https://api.twitter.com/oauth/authenticate',
-            consumer_key=app.config['TWITTER_CONSUMER_KEY'],
-            consumer_secret=app.config['TWITTER_CONSUMER_SECRET'])
-
-
-class Facebook(object):
-
-    """Class Facebook to enable Facebook signin."""
-
-    def __init__(self, app=None):
-        """Init method."""
-        self.app = app
-        if app is not None:  # pragma: no cover
-            self.init_app(app)
-
-    def init_app(self, app):
-        """Init app using factories pattern."""
-        self.oauth = OAuth().remote_app(
-            'facebook',
-            base_url='https://graph.facebook.com/',
-            request_token_url=None,
-            access_token_url='/oauth/access_token',
-            authorize_url='https://www.facebook.com/dialog/oauth',
-            consumer_key=app.config['FACEBOOK_APP_ID'],
-            consumer_secret=app.config['FACEBOOK_APP_SECRET'],
-            request_token_params={'scope': 'email'})
-
-
-class Google(object):
-
-    """Class Google to enable Google signin."""
-
-    def __init__(self, app=None):
-        """Init method."""
-        self.app = app
-        if app is not None:  # pragma: no cover
-            self.init_app(app)
-
-    def init_app(self, app):
-        """Init app using factories pattern."""
-        self.oauth = OAuth().remote_app(
-            'google',
-            base_url='https://www.googleapis.com/oauth2/v1/',
-            authorize_url='https://accounts.google.com/o/oauth2/auth',
-            request_token_url=None,
-            request_token_params={'scope': 'https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email'},
-            access_token_url='https://accounts.google.com/o/oauth2/token',
-            access_token_method='POST',
-            consumer_key=app.config['GOOGLE_CLIENT_ID'],
-            consumer_secret=app.config['GOOGLE_CLIENT_SECRET'])
-
-
 def unicode_csv_reader(unicode_csv_data, dialect=csv.excel, **kwargs):
     """Unicode CSV reader."""
     # This code is taken from http://docs.python.org/library/csv.html#examples
@@ -321,26 +250,32 @@ class UnicodeWriter:
 def get_user_signup_method(user):
     """Return which OAuth sign up method the user used."""
     msg = u'Sorry, there is already an account with the same e-mail.'
-    # Google
-    if user.info.get('google_token'):
-        msg += " <strong>It seems like you signed up with your Google account.</strong>"
-        msg += "<br/>You can try and sign in by clicking in the Google button."
-        return (msg, 'google')
-    # Facebook
-    elif user.info.get('facebook_token'):
-        msg += " <strong>It seems like you signed up with your Facebook account.</strong>"
-        msg += "<br/>You can try and sign in by clicking in the Facebook button."
-        return (msg, 'facebook')
-    # Twitter
-    elif user.info.get('twitter_token'):
-        msg += " <strong>It seems like you signed up with your Twitter account.</strong>"
-        msg += "<br/>You can try and sign in by clicking in the Twitter button."
-        return (msg, 'twitter')
-    # Local account
+    if user.info:
+        # Google
+        if user.info.get('google_token'):
+            msg += " <strong>It seems like you signed up with your Google account.</strong>"
+            msg += "<br/>You can try and sign in by clicking in the Google button."
+            return (msg, 'google')
+        # Facebook
+        elif user.info.get('facebook_token'):
+            msg += " <strong>It seems like you signed up with your Facebook account.</strong>"
+            msg += "<br/>You can try and sign in by clicking in the Facebook button."
+            return (msg, 'facebook')
+        # Twitter
+        elif user.info.get('twitter_token'):
+            msg += " <strong>It seems like you signed up with your Twitter account.</strong>"
+            msg += "<br/>You can try and sign in by clicking in the Twitter button."
+            return (msg, 'twitter')
+        # Local account
+        else:
+            msg += " <strong>It seems that you created an account locally.</strong>"
+            msg += " <br/>You can reset your password if you don't remember it."
+            return (msg, 'local')
     else:
         msg += " <strong>It seems that you created an account locally.</strong>"
         msg += " <br/>You can reset your password if you don't remember it."
         return (msg, 'local')
+
 
 
 def get_port():
@@ -355,7 +290,6 @@ def get_port():
 
 def get_user_id_or_ip():
     """Return the id of the current user if is authenticated.
-
     Otherwise returns its IP address (defaults to 127.0.0.1).
     """
     user_id = current_user.id if current_user.is_authenticated() else None
@@ -366,7 +300,6 @@ def get_user_id_or_ip():
 
 def with_cache_disabled(f):
     """Decorator that disables the cache for the execution of a function.
-
     It enables it back when the function call is done.
     """
     import os
@@ -401,3 +334,71 @@ def username_from_full_name(username):
     if type(username) == str:
         return username.decode('ascii', 'ignore').lower().replace(' ', '')
     return username.encode('ascii', 'ignore').decode('utf-8').lower().replace(' ', '')
+
+
+def rank(projects):
+    """Takes a list of (published) projects (as dicts) and orders them by
+    activity, number of volunteers, number of tasks and other criteria."""
+    def earned_points(project):
+        points = 0
+        if project['overall_progress'] != 100L:
+            points += 1000
+        if not ('test' in project['name'].lower()
+                or 'test' in project['short_name'].lower()):
+            points += 500
+        if project['info'].get('thumbnail'):
+            points += 200
+        points += _points_by_interval(project['n_tasks'], weight=1)
+        points += _points_by_interval(project['n_volunteers'], weight=2)
+        points += _last_activity_points(project)
+        return points
+
+    projects.sort(key=earned_points, reverse=True)
+    return projects
+
+
+def _last_activity_points(project):
+    default = datetime(1970, 1, 1, 0, 0).strftime('%Y-%m-%dT%H:%M:%S')
+    updated_datetime = (project.get('updated') or default)
+    last_activity_datetime = (project.get('last_activity_raw') or default)
+    updated_datetime = updated_datetime.split('.')[0]
+    last_activity_datetime = last_activity_datetime.split('.')[0]
+    updated = datetime.strptime(updated_datetime, '%Y-%m-%dT%H:%M:%S')
+    last_activity = datetime.strptime(last_activity_datetime, '%Y-%m-%dT%H:%M:%S')
+    most_recent = max(updated, last_activity)
+
+    days_since_modified = (datetime.utcnow() - most_recent).days
+
+    if days_since_modified < 1:
+        return 50
+    if days_since_modified < 2:
+        return 20
+    if days_since_modified < 3:
+        return 10
+    if days_since_modified < 4:
+        return 5
+    return 0
+
+
+def _points_by_interval(value, weight=1):
+    if value > 100:
+        return 20 * weight
+    if value > 50:
+        return 15 * weight
+    if value > 20:
+        return 10 * weight
+    if value > 10:
+        return 5 * weight
+    if value > 0:
+        return 1 * weight
+    return 0
+
+
+def publish_channel(sentinel, project_short_name, data, type, private=True):
+    """Publish in a channel some JSON data as a string."""
+    if private:
+        channel = "channel_%s_%s" % ("private", project_short_name)
+    else:
+        channel = "channel_%s_%s" % ("public", project_short_name)
+    msg = dict(type=type, data=data)
+    sentinel.master.publish(channel, json.dumps(msg))

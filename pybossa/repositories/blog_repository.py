@@ -1,7 +1,7 @@
 # -*- coding: utf8 -*-
 # This file is part of PyBossa.
 #
-# Copyright (C) 2014 SF Isle of Man Limited
+# Copyright (C) 2015 SciFabric LTD.
 #
 # PyBossa is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as published by
@@ -33,9 +33,17 @@ class BlogRepository(object):
     def get_by(self, **attributes):
         return self.db.session.query(Blogpost).filter_by(**attributes).first()
 
-    def filter_by(self, limit=None, offset=0, **filters):
+    def filter_by(self, limit=None, offset=0, yielded=False, last_id=None,
+                  **filters):
         query = self.db.session.query(Blogpost).filter_by(**filters)
-        query = query.order_by(Blogpost.id).limit(limit).offset(offset)
+        if last_id:
+            query = query.filter(Blogpost.id > last_id)
+            query = query.order_by(Blogpost.id).limit(limit)
+        else:
+            query = query.order_by(Blogpost.id).limit(limit).offset(offset)
+        if yielded:
+            limit = limit or 1
+            return query.yield_per(limit)
         return query.all()
 
     def save(self, blogpost):

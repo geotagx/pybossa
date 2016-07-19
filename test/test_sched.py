@@ -1,7 +1,7 @@
 # -*- coding: utf8 -*-
 # This file is part of PyBossa.
 #
-# Copyright (C) 2013 SF Isle of Man Limited
+# Copyright (C) 2015 SciFabric LTD.
 #
 # PyBossa is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as published by
@@ -45,7 +45,6 @@ class TestSched(sched.Helper):
         TaskFactory.create(project=project, info='hola')
 
         res = self.app.get('api/project/%s/newtask' %project.id)
-        print res.data
         data = json.loads(res.data)
         assert data['info'] == 'hola', data
 
@@ -55,7 +54,7 @@ class TestSched(sched.Helper):
         assigned_tasks = []
         # Get a Task until scheduler returns None
         project = ProjectFactory.create()
-        tasks = TaskFactory.create_batch(3, project=project)
+        tasks = TaskFactory.create_batch(3, project=project, info={})
         res = self.app.get('api/project/%s/newtask' %project.id)
         data = json.loads(res.data)
         while data.get('info') is not None:
@@ -220,71 +219,6 @@ class TestSched(sched.Helper):
         # Check that task.state is updated to completed
         for t in tasks:
             assert t.state == "completed", t.state
-
-    @with_context
-    @patch('pybossa.api.task_run._check_task_requested_by_user')
-    def test_tasks_for_user_ip_id(self, fake_validation):
-        """ Test SCHED newtask to see if sends the same ammount of Task to
-            user_id and user_ip
-        """
-        # Del Fixture Task
-        self.create()
-        self.del_task_runs()
-
-        assigned_tasks = []
-        for i in range(10):
-            signin = False
-            if random.random >= 0.5:
-                signin = True
-                self.register(fullname="John Doe" + str(i),
-                              name="johndoe" + str(i),
-                              password="1234" + str(i))
-
-            if signin:
-                self.signin()
-            # Get Task until scheduler returns None
-            res = self.app.get('api/project/1/newtask')
-            data = json.loads(res.data)
-
-            while data.get('info') is not None:
-                # Check that we received a Task
-                assert data.get('info'), data
-                self.redis_flushall()
-
-                # Save the assigned task
-                assigned_tasks.append(data)
-
-                # Submit an Answer for the assigned task
-                if signin:
-                    tr = dict(project_id=data['project_id'], task_id=data['id'],
-                              info={'answer': 'No'})
-                    tr = json.dumps(tr)
-                    self.app.post('/api/taskrun', data=tr)
-                else:
-                    tr = TaskRun(project_id=data['project_id'], task_id=data['id'],
-                                 user_ip="127.0.0." + str(i),
-                                 info={'answer': 'Yes'})
-                    db.session.add(tr)
-                    db.session.commit()
-
-                res = self.app.get('api/project/1/newtask')
-                data = json.loads(res.data)
-            if signin:
-                self.signout()
-
-        # Check if there are 30 TaskRuns per Task
-        tasks = db.session.query(Task).filter_by(project_id=1).all()
-        for t in tasks:
-            assert len(t.task_runs) == 10, t.task_runs
-        # Check that all the answers are from different IPs and IDs
-        err_msg1 = "There are two or more Answers from same User ID"
-        err_msg2 = "There are two or more Answers from same User IP"
-        for t in tasks:
-            for tr in t.task_runs:
-                if tr.user_id:
-                    assert self.is_unique(tr.user_id, t.task_runs), err_msg1
-                else:
-                    assert self.is_unique(tr.user_ip, t.task_runs), err_msg2
 
     @with_context
     def test_task_preloading(self):

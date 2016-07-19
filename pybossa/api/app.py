@@ -1,7 +1,7 @@
 # -*- coding: utf8 -*-
 # This file is part of PyBossa.
 #
-# Copyright (C) 2014 SF Isle of Man Limited
+# Copyright (C) 2015 SciFabric LTD.
 #
 # PyBossa is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as published by
@@ -22,14 +22,14 @@ This package adds GET, POST, PUT and DELETE methods for:
     * projects,
 
 """
-from flask import redirect, url_for, request
+from flask import redirect, url_for, request, abort
 from flask.ext.login import current_user
 from api_base import APIBase
 from pybossa.model.project import Project
 import pybossa.cache.projects as cached_projects
 from pybossa.cache.categories import get_all as get_categories
 from pybossa.util import is_reserved_name
-from pybossa.core import auditlog_repo
+from pybossa.core import auditlog_repo, result_repo
 from pybossa.auditlogger import AuditLogger
 
 auditlogger = AuditLogger(auditlog_repo, caller='api')
@@ -60,3 +60,4 @@ class AppAPI(APIBase):
         return redirect(url_for('api.api_project',
                                 oid=oid,
                                 api_key=api_key), code=307)
+

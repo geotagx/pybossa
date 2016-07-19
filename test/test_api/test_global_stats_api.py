@@ -1,7 +1,7 @@
 # -*- coding: utf8 -*-
 # This file is part of PyBossa.
 #
-# Copyright (C) 2013 SF Isle of Man Limited
+# Copyright (C) 2015 SciFabric LTD.
 #
 # PyBossa is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as published by
@@ -30,7 +30,7 @@ class TestGlobalStatsAPI(TestAPI):
         stats = json.loads(res.data)
         assert res.status_code == 200, res.status_code
         keys = ['n_projects', 'n_pending_tasks',
-                'n_users', 'n_task_runs', 'categories']
+                'n_users', 'n_task_runs', 'n_results', 'categories']
         for k in keys:
             err_msg = "%s should be in stats JSON object" % k
             assert k in stats.keys(), err_msg

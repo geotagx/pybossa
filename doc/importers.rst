@@ -5,16 +5,26 @@ Importer interface
 ==================
 
 Task importers are currently located in importers.py; each gets
-a class, which should inherit from _BulkTaskImport and provide
+a class, which should inherit from BulkTaskImport and provide
 the following public interface:
 
 * importer_id
 * tasks()
+* count_tasks()
+* import_metadata()
 
 importer_id is the name of the importer; any of the supported importers:
-'csv', 'gdocs', 'epicollect', 'flickr' and 'dropbox'.
+'csv', 'gdocs', 'epicollect', 'flickr', 'dropbox', 'twitter', 's3' and 'youtube'.
 
-tasks() should generate a list of tasks
+tasks() should generate a list of tasks.
+
+count_tasks() should return the number of tasks that will be created. This is
+because trying to import a large number of tasks (200 or more) will be done
+as a background job.
+
+import_metadata() may return any information about the tasks that are going to
+be imported. This is used for the autoimporters, and the information returned by
+this method is stored and available to be used by the next autoimport execution.
 
 These classes are intended for private use within the importers.py module. New
 ones can be created here to handle different kind of importing mechanisms.
@@ -44,5 +54,5 @@ integration with the Flickr service is found, then the Flickr importer won't be
 available).
 
 get_autoimporter_names returns a list of the available importers for using as
-autoimport background jobs. Again, this list may vary depending on the  server
+autoimport background jobs. Again, this list may vary depending on the server
 configuration.

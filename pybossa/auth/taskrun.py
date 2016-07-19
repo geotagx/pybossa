@@ -1,7 +1,7 @@
 # -*- coding: utf8 -*-
 # This file is part of PyBossa.
 #
-# Copyright (C) 2013 SF Isle of Man Limited
+# Copyright (C) 2015 SciFabric LTD.
 #
 # PyBossa is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as published by
@@ -20,18 +20,23 @@ from flask import abort
 
 
 class TaskRunAuth(object):
+    _specific_actions = []
 
-    def __init__(self, task_repo, project_repo):
+    def __init__(self, task_repo, project_repo, result_repo):
         self.task_repo = task_repo
         self.project_repo = project_repo
+        self.result_repo = result_repo
+
+    @property
+    def specific_actions(self):
+        return self._specific_actions
 
     def can(self, user, action, taskrun=None):
         action = ''.join(['_', action])
         return getattr(self, action)(user, taskrun)
 
     def _create(self, user, taskrun):
-        project_id = self.task_repo.get_task(taskrun.task_id).project_id
-        project = self.project_repo.get(project_id)
+        project = self.project_repo.get(taskrun.project_id)
         if (user.is_anonymous() and
                 project.allow_anonymous_contributors is False):
             return False
@@ -52,6 +57,10 @@ class TaskRunAuth(object):
 
     def _delete(self, user, taskrun):
         if user.is_anonymous():
+            return False
+        result = self.result_repo.get_by(project_id=taskrun.project_id,
+                                         task_id=taskrun.task_id)
+        if result and (taskrun.id in result.task_run_ids):
             return False
         if taskrun.user_id is None:
             return user.admin

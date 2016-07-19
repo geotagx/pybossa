@@ -1,7 +1,7 @@
 # -*- coding: utf8 -*-
 # This file is part of PyBossa.
 #
-# Copyright (C) 2014 SF Isle of Man Limited
+# Copyright (C) 2015 SciFabric LTD.
 #
 # PyBossa is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as published by
@@ -40,9 +40,19 @@ class UserRepository(object):
     def get_all(self):
         return self.db.session.query(User).all()
 
-    def filter_by(self, limit=None, offset=0, **filters):
+    def filter_by(self, limit=None, offset=0, yielded=False, last_id=None,
+                  fulltextsearch=None, desc=False, **filters):
+        if filters.get('owner_id'):
+            del filters['owner_id']
         query = self.db.session.query(User).filter_by(**filters)
-        query = query.order_by(User.id).limit(limit).offset(offset)
+        if last_id:
+            query = query.filter(User.id > last_id)
+            query = query.order_by(User.id).limit(limit)
+        else:
+            query = query.order_by(User.id).limit(limit).offset(offset)
+        if yielded:
+            limit = limit or 1
+            return query.yield_per(limit)
         return query.all()
 
     def search_by_name(self, keyword):

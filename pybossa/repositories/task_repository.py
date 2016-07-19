@@ -1,7 +1,7 @@
 # -*- coding: utf8 -*-
 # This file is part of PyBossa.
 #
-# Copyright (C) 2014 SF Isle of Man Limited
+# Copyright (C) 2015 SciFabric LTD.
 #
 # PyBossa is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as published by
@@ -16,55 +16,83 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with PyBossa.  If not, see <http://www.gnu.org/licenses/>.
 
-from sqlalchemy.sql import text
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy import cast, Date
 
+from pybossa.repositories import Repository
 from pybossa.model.task import Task
 from pybossa.model.task_run import TaskRun
 from pybossa.exc import WrongObjectError, DBIntegrityError
 from pybossa.cache import projects as cached_projects
 from pybossa.core import uploader
+from sqlalchemy import text
 
 
-class TaskRepository(object):
-
-    def __init__(self, db):
-        self.db = db
+class TaskRepository(Repository):
 
     # Methods for queries on Task objects
     def get_task(self, id):
         return self.db.session.query(Task).get(id)
 
     def get_task_by(self, **attributes):
-        return self.db.session.query(Task).filter_by(**attributes).first()
+        filters = self.generate_query_from_keywords(Task, **attributes)
+        return self.db.session.query(Task).filter(*filters).first()
 
-    def filter_tasks_by(self, limit=None, offset=0, yielded=False, **filters):
-        query = self.db.session.query(Task).filter_by(**filters)
-        query = query.order_by(Task.id).limit(limit).offset(offset)
+    def filter_tasks_by(self, limit=None, offset=0, yielded=False,
+                        last_id=None, fulltextsearch=None, desc=False,
+                        **filters):
+
+        query = self.create_context(filters, fulltextsearch, Task)
+        if last_id:
+            query = query.filter(Task.id > last_id)
+            query = query.order_by(Task.id).limit(limit)
+        else:
+            if desc:
+                query = query.order_by(cast(Task.created, Date).desc())\
+                        .limit(limit).offset(offset)
+            else:
+                query = query.order_by(Task.id).limit(limit).offset(offset)
         if yielded:
-            return query.yield_per(1)
+            limit = limit or 1
+            return query.yield_per(limit)
         return query.all()
 
     def count_tasks_with(self, **filters):
-        return self.db.session.query(Task).filter_by(**filters).count()
+        query_args = self.generate_query_from_keywords(Task, **filters)
+        return self.db.session.query(Task).filter(*query_args).count()
 
 
     # Methods for queries on TaskRun objects
     def get_task_run(self, id):
         return self.db.session.query(TaskRun).get(id)
 
-    def get_task_run_by(self, **attributes):
-        return self.db.session.query(TaskRun).filter_by(**attributes).first()
+    def get_task_run_by(self, fulltextsearch=None, **attributes):
+        filters = self.generate_query_from_keywords(TaskRun,
+                                                    fulltextsearch,
+                                                    **attributes)
+        return self.db.session.query(TaskRun).filter(*filters).first()
 
-    def filter_task_runs_by(self, limit=None, offset=0, yielded=False, **filters):
-        query = self.db.session.query(TaskRun).filter_by(**filters)
-        query = query.order_by(TaskRun.id).limit(limit).offset(offset)
+    def filter_task_runs_by(self, limit=None, offset=0, last_id=None,
+                            yielded=False, fulltextsearch=None,
+                            desc=False, **filters):
+        query = self.create_context(filters, fulltextsearch, TaskRun)
+        if last_id:
+            query = query.filter(TaskRun.id > last_id)
+            query = query.order_by(TaskRun.id).limit(limit)
+        else:
+            if desc:
+                query = query.order_by(cast(TaskRun.created, Date).desc())\
+                        .limit(limit).offset(offset)
+            else:
+                query = query.order_by(TaskRun.id).limit(limit).offset(offset)
         if yielded:
-            return query.yield_per(1)
+            limit = limit or 1
+            return query.yield_per(limit)
         return query.all()
 
     def count_task_runs_with(self, **filters):
-        return self.db.session.query(TaskRun).filter_by(**filters).count()
+        query_args = self.generate_query_from_keywords(TaskRun, **filters)
+        return self.db.session.query(TaskRun).filter(*query_args).count()
 
 
     # Methods for saving, deleting and updating both Task and TaskRun objects
@@ -95,14 +123,26 @@ class TaskRepository(object):
         cached_projects.clean_project(element.project_id)
         self._delete_zip_files_from_store(project)
 
-    def delete_all(self, elements):
-        if not elements:
-            return
-        for element in elements:
-            self._delete(element)
-        project = elements[0].project
+    def delete_valid_from_project(self, project):
+        """Delete only tasks that have no results associated."""
+        sql = text('''
+                   DELETE FROM task WHERE task.project_id=:project_id
+                   AND task.id NOT IN
+                   (SELECT task_id FROM result
+                   WHERE result.project_id=:project_id GROUP BY result.task_id);
+                   ''')
+        self.db.session.execute(sql, dict(project_id=project.id))
         self.db.session.commit()
-        cached_projects.clean_project(element.project_id)
+        cached_projects.clean_project(project.id)
+        self._delete_zip_files_from_store(project)
+
+    def delete_taskruns_from_project(self, project):
+        sql = text('''
+                   DELETE FROM task_run WHERE project_id=:project_id;
+                   ''')
+        self.db.session.execute(sql, dict(project_id=project.id))
+        self.db.session.commit()
+        cached_projects.clean_project(project.id)
         self._delete_zip_files_from_store(project)
 
     def update_tasks_redundancy(self, project, n_answer):

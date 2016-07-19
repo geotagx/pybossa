@@ -1,7 +1,7 @@
 # -*- coding: utf8 -*-
 # This file is part of PyBossa.
 #
-# Copyright (C) 2013 SF Isle of Man Limited
+# Copyright (C) 2015 SciFabric LTD.
 #
 # PyBossa is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as published by
@@ -78,12 +78,6 @@ class TestModelBase(Test):
         assert project.name == u'My New Project', project
         # year would start with 201...
         assert project.created.startswith('201'), project.created
-        assert project.long_tasks == 0, project.long_tasks
-        assert project.hidden == 0, project.hidden
-        assert project.time_estimate == 0, project
-        assert project.time_limit == 0, project
-        assert project.calibration_frac == 0, project
-        assert project.bolt_course_id == 0
         assert len(project.tasks) == 1, project
         assert project.owner.name == username, project
         out_task = project.tasks[0]

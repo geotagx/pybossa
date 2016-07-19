@@ -1,7 +1,7 @@
 # -*- coding: utf8 -*-
 # This file is part of PyBossa.
 #
-# Copyright (C) 2014 SF Isle of Man Limited
+# Copyright (C) 2015 SciFabric LTD.
 #
 # PyBossa is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as published by
@@ -21,7 +21,7 @@ from flask_wtf import Form
 from flask_wtf.file import FileField, FileRequired
 from wtforms import IntegerField, DecimalField, TextField, BooleanField, \
     SelectField, validators, TextAreaField, PasswordField, FieldList
-from wtforms.fields.html5 import EmailField
+from wtforms.fields.html5 import EmailField, URLField
 from wtforms.widgets import HiddenInput
 from flask.ext.babel import lazy_gettext, gettext
 
@@ -50,6 +50,8 @@ class ProjectForm(Form):
                             pb_validator.ReservedName('project', current_app)])
     long_description = TextAreaField(lazy_gettext('Long Description'),
                                      [validators.Required()])
+    description = TextAreaField(lazy_gettext('Description'),
+                                [validators.Length(max=255)])
 
 
 class ProjectUpdateForm(ProjectForm):
@@ -60,13 +62,10 @@ class ProjectUpdateForm(ProjectForm):
                                     "You must provide a description.")),
                              validators.Length(max=255)])
     long_description = TextAreaField(lazy_gettext('Long Description'))
-    allow_anonymous_contributors = SelectField(
-        lazy_gettext('Allow Anonymous Contributors'),
-        choices=[('True', lazy_gettext('Yes')),
-                 ('False', lazy_gettext('No'))])
+    allow_anonymous_contributors = BooleanField(lazy_gettext('Allow Anonymous Contributors'))
     category_id = SelectField(lazy_gettext('Category'), coerce=int)
-    hidden = BooleanField(lazy_gettext('Hide?'))
-    password = TextField(lazy_gettext('Password (leave blank for no password)'))
+    protect = BooleanField(lazy_gettext('Protect with a password?'))
+    password = TextField(lazy_gettext('Password'))
     webhook = TextField(lazy_gettext('Webhook'),
                         [pb_validator.Webhook()])
 
@@ -125,7 +124,7 @@ class PasswordForm(Form):
                                     "You must enter a password"))])
 
 
-class _BulkTaskCSVImportForm(Form):
+class BulkTaskCSVImportForm(Form):
     form_name = TextField(label=None, widget=HiddenInput(), default='csv')
     msg_required = lazy_gettext("You must provide a URL")
     msg_url = lazy_gettext("Oops! That's not a valid URL. "
@@ -138,7 +137,7 @@ class _BulkTaskCSVImportForm(Form):
         return {'type': 'csv', 'csv_url': self.csv_url.data}
 
 
-class _BulkTaskGDImportForm(Form):
+class BulkTaskGDImportForm(Form):
     form_name = TextField(label=None, widget=HiddenInput(), default='gdocs')
     msg_required = lazy_gettext("You must provide a URL")
     msg_url = lazy_gettext("Oops! That's not a valid URL. "
@@ -151,7 +150,7 @@ class _BulkTaskGDImportForm(Form):
         return {'type': 'gdocs', 'googledocs_url': self.googledocs_url.data}
 
 
-class _BulkTaskEpiCollectPlusImportForm(Form):
+class BulkTaskEpiCollectPlusImportForm(Form):
     form_name = TextField(label=None, widget=HiddenInput(), default='epicollect')
     msg_required = lazy_gettext("You must provide an EpiCollect Plus "
                                 "project name")
@@ -168,7 +167,7 @@ class _BulkTaskEpiCollectPlusImportForm(Form):
                 'epicollect_form': self.epicollect_form.data}
 
 
-class _BulkTaskFlickrImportForm(Form):
+class BulkTaskFlickrImportForm(Form):
     form_name = TextField(label=None, widget=HiddenInput(), default='flickr')
     msg_required = lazy_gettext("You must provide a valid Flickr album ID")
     album_id = TextField(lazy_gettext('Album ID'),
@@ -177,21 +176,64 @@ class _BulkTaskFlickrImportForm(Form):
         return {'type': 'flickr', 'album_id': self.album_id.data}
 
 
-class _BulkTaskDropboxImportForm(Form):
+class BulkTaskDropboxImportForm(Form):
     form_name = TextField(label=None, widget=HiddenInput(), default='dropbox')
     files = FieldList(TextField(label=None, widget=HiddenInput()))
     def get_import_data(self):
         return {'type': 'dropbox', 'files': self.files.data}
 
 
+class BulkTaskTwitterImportForm(Form):
+    form_name = TextField(label=None, widget=HiddenInput(), default='twitter')
+    msg_required = lazy_gettext("You must provide some source for the tweets")
+    source = TextField(lazy_gettext('Source'),
+                       [validators.Required(message=msg_required)])
+    max_tweets = IntegerField(lazy_gettext('Number of tweets'))
+    user_credentials = TextField(label=None)
+    def get_import_data(self):
+        return {
+            'type': 'twitter',
+            'source': self.source.data,
+            'max_tweets': self.max_tweets.data,
+            'user_credentials': self.user_credentials.data,
+        }
+
+class BulkTaskYoutubeImportForm(Form):
+    form_name = TextField(label=None, widget=HiddenInput(), default='youtube')
+    msg_required = lazy_gettext("You must provide a valid playlist")
+    playlist_url = URLField(lazy_gettext('Playlist'),
+                             [validators.Required(message=msg_required)])
+    def get_import_data(self):
+        return {
+          'type': 'youtube',
+          'playlist_url': self.playlist_url.data
+        }
+
+class BulkTaskS3ImportForm(Form):
+    form_name = TextField(label=None, widget=HiddenInput(), default='s3')
+    files = FieldList(TextField(label=None, widget=HiddenInput()))
+    msg_required = lazy_gettext("You must provide a valid bucket")
+    bucket = TextField(lazy_gettext('Bucket'),
+                       [validators.Required(message=msg_required)])
+    def get_import_data(self):
+        return {
+            'type': 's3',
+            'files': self.files.data,
+            'bucket': self.bucket.data
+        }
+
+
 class GenericBulkTaskImportForm(object):
     """Callable class that will return, when called, the appropriate form
     instance"""
-    _forms = { 'csv': _BulkTaskCSVImportForm,
-              'gdocs': _BulkTaskGDImportForm,
-              'epicollect': _BulkTaskEpiCollectPlusImportForm,
-              'flickr': _BulkTaskFlickrImportForm,
-              'dropbox': _BulkTaskDropboxImportForm }
+    _forms = { 'csv': BulkTaskCSVImportForm,
+              'gdocs': BulkTaskGDImportForm,
+              'epicollect': BulkTaskEpiCollectPlusImportForm,
+              'flickr': BulkTaskFlickrImportForm,
+              'dropbox': BulkTaskDropboxImportForm,
+              'twitter': BulkTaskTwitterImportForm,
+              's3': BulkTaskS3ImportForm,
+              'youtube': BulkTaskYoutubeImportForm }
 
     def __call__(self, form_name, *form_args, **form_kwargs):
         if form_name is None:
@@ -219,13 +261,13 @@ class RegisterForm(Form):
 
     """Register Form Class for creating an account in PyBossa."""
 
-    err_msg = lazy_gettext("Full name must be between 3 and %s "
-                           "characters long" % USER_FULLNAME_MAX_LENGTH)
+    err_msg = lazy_gettext("Full name must be between 3 and %(fullname)s "
+                           "characters long", fullname=USER_FULLNAME_MAX_LENGTH)
     fullname = TextField(lazy_gettext('Full name'),
                          [validators.Length(min=3, max=USER_FULLNAME_MAX_LENGTH, message=err_msg)])
 
-    err_msg = lazy_gettext("User name must be between 3 and %s "
-                           "characters long" % USER_NAME_MAX_LENGTH)
+    err_msg = lazy_gettext("User name must be between 3 and %(username_length)s "
+                           "characters long", username_length=USER_NAME_MAX_LENGTH)
     err_msg_2 = lazy_gettext("The user name is already taken")
     name = TextField(lazy_gettext('User name'),
                          [validators.Length(min=3, max=USER_NAME_MAX_LENGTH, message=err_msg),
@@ -233,8 +275,8 @@ class RegisterForm(Form):
                           pb_validator.Unique(user_repo.get_by, 'name', err_msg_2),
                           pb_validator.ReservedName('account', current_app)])
 
-    err_msg = lazy_gettext("Email must be between 3 and %s "
-                           "characters long" % EMAIL_MAX_LENGTH)
+    err_msg = lazy_gettext("Email must be between 3 and %(email_length)s "
+                           "characters long", email_length=EMAIL_MAX_LENGTH)
     err_msg_2 = lazy_gettext("Email is already taken")
     email_addr = EmailField(lazy_gettext('Email Address'),
                            [validators.Length(min=3,
@@ -258,13 +300,13 @@ class UpdateProfileForm(Form):
 
     id = IntegerField(label=None, widget=HiddenInput())
 
-    err_msg = lazy_gettext("Full name must be between 3 and %s "
-                           "characters long" % USER_FULLNAME_MAX_LENGTH)
+    err_msg = lazy_gettext("Full name must be between 3 and %(fullname)s "
+                           "characters long" , fullname=USER_FULLNAME_MAX_LENGTH)
     fullname = TextField(lazy_gettext('Full name'),
                          [validators.Length(min=3, max=USER_FULLNAME_MAX_LENGTH, message=err_msg)])
 
-    err_msg = lazy_gettext("User name must be between 3 and %s "
-                           "characters long" % USER_NAME_MAX_LENGTH)
+    err_msg = lazy_gettext("User name must be between 3 and %(username_length)s "
+                           "characters long", username_length=USER_NAME_MAX_LENGTH)
     err_msg_2 = lazy_gettext("The user name is already taken")
     name = TextField(lazy_gettext('Username'),
                      [validators.Length(min=3, max=USER_NAME_MAX_LENGTH, message=err_msg),
@@ -272,8 +314,8 @@ class UpdateProfileForm(Form):
                       pb_validator.Unique(user_repo.get_by, 'name', err_msg_2),
                       pb_validator.ReservedName('account', current_app)])
 
-    err_msg = lazy_gettext("Email must be between 3 and %s "
-                           "characters long" % EMAIL_MAX_LENGTH)
+    err_msg = lazy_gettext("Email must be between 3 and %(email_length)s "
+                           "characters long", email_length=EMAIL_MAX_LENGTH)
     err_msg_2 = lazy_gettext("Email is already taken")
     email_addr = EmailField(lazy_gettext('Email Address'),
                            [validators.Length(min=3,
@@ -291,13 +333,7 @@ class UpdateProfileForm(Form):
         """Fill the locale.choices."""
         choices = []
         for locale in locales:
-            if locale == 'en':
-                lang = gettext("English")
-            if locale == 'es':
-                lang = gettext("Spanish")
-            if locale == 'fr':
-                lang = gettext("French")
-            choices.append((locale, lang))
+            choices.append(locale)
         self.locale.choices = choices
 
 
@@ -332,8 +368,8 @@ class ForgotPasswordForm(Form):
 
     """Form Class for forgotten password."""
 
-    err_msg = lazy_gettext("Email must be between 3 and %s "
-                           "characters long" % EMAIL_MAX_LENGTH)
+    err_msg = lazy_gettext("Email must be between 3 and %(email_length)s "
+                           "characters long", email_length=EMAIL_MAX_LENGTH)
     email_addr = EmailField(lazy_gettext('Email Address'),
                            [validators.Length(min=3,
                                               max=EMAIL_MAX_LENGTH,

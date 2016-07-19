@@ -1,7 +1,7 @@
 # -*- coding: utf8 -*-
 # This file is part of PyBossa.
 #
-# Copyright (C) 2014 SF Isle of Man Limited
+# Copyright (C) 2015 SciFabric LTD.
 #
 # PyBossa is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as published by
@@ -18,9 +18,14 @@
 
 
 class AuditlogAuth(object):
+    _specific_actions = []
 
     def __init__(self, project_repo):
         self.project_repo = project_repo
+
+    @property
+    def specific_actions(self):
+        return self._specific_actions
 
     def can(self, user, action, auditlog=None, project_id=None):
         action = ''.join(['_', action])
@@ -33,7 +38,7 @@ class AuditlogAuth(object):
         if user.is_anonymous() or (auditlog is None and project_id is None):
             return False
         project = self._get_project(auditlog, project_id)
-        return user.admin or (user.id == project.owner_id and user.pro)
+        return user.admin or user.id == project.owner_id
 
     def _update(self, user, auditlog, project_id=None):
         return False

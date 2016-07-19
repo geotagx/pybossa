@@ -1,7 +1,7 @@
 # -*- coding: utf8 -*-
 # This file is part of PyBossa.
 #
-# Copyright (C) 2014 SF Isle of Man Limited
+# Copyright (C) 2015 SciFabric LTD.
 #
 # PyBossa is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as published by
@@ -190,8 +190,7 @@ class TestProjectPasswdManager(object):
 
 
     def test_validates(self):
-        """Test validates tells the project to check the password (not too much
-        logic in here)"""
+        """Test validates tells the project to check the password"""
         password = '1234'
 
         self.psswd_mngr.validates(password, self.project)

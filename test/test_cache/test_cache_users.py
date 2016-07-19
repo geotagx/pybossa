@@ -1,7 +1,7 @@
 # -*- coding: utf8 -*-
 # This file is part of PyBossa.
 #
-# Copyright (C) 2014 SF Isle of Man Limited
+# Copyright (C) 2015 SciFabric LTD.
 #
 # PyBossa is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as published by
@@ -132,8 +132,7 @@ class TestUsersCache(Test):
         """Test CACHE USERS published_projects returns a list with the projects that
         are published by the user"""
         user = UserFactory.create()
-        published_project = ProjectFactory.create(owner=user)
-        TaskFactory.create(project=published_project)
+        published_project = ProjectFactory.create(owner=user, published=True)
 
         projects_published = cached_users.published_projects(user.id)
 
@@ -142,14 +141,11 @@ class TestUsersCache(Test):
 
 
     def test_published_projects_only_returns_published(self):
-        """Test CACHE USERS published_projects does not return hidden, draft
+        """Test CACHE USERS published_projects does not return draft
         or another user's projects"""
         user = UserFactory.create()
-        another_user_published_project = ProjectFactory.create()
-        TaskFactory.create(project=another_user_published_project)
-        draft_project = ProjectFactory.create(info={})
-        hidden_project = ProjectFactory.create(owner=user, hidden=1)
-        TaskFactory.create(project=hidden_project)
+        another_user_published_project = ProjectFactory.create(published=True)
+        draft_project = ProjectFactory.create(owner=user, published=False)
 
         projects_published = cached_users.published_projects(user.id)
 
@@ -160,8 +156,7 @@ class TestUsersCache(Test):
         """Test CACHE USERS published_projects returns the info of the projects with
         the required fields"""
         user = UserFactory.create()
-        published_project = ProjectFactory.create(owner=user)
-        task = TaskFactory.create(project=published_project)
+        published_project = ProjectFactory.create(owner=user, published=True)
         fields = ('id', 'name', 'short_name', 'owner_id', 'description',
                  'overall_progress', 'n_tasks', 'n_volunteers', 'info')
 
@@ -175,7 +170,7 @@ class TestUsersCache(Test):
         """Test CACHE USERS draft_projects returns an empty list if the user has no
         draft projects"""
         user = UserFactory.create()
-        published_project = ProjectFactory.create(owner=user)
+        published_project = ProjectFactory.create(owner=user, published=True)
 
         draft_projects = cached_users.draft_projects(user.id)
 
@@ -185,7 +180,7 @@ class TestUsersCache(Test):
     def test_draft_projects_return_drafts(self):
         """Test CACHE USERS draft_projects returns draft belonging to the user"""
         user = UserFactory.create()
-        draft_project = ProjectFactory.create(owner=user, info={})
+        draft_project = ProjectFactory.create(owner=user, published=False)
 
         draft_projects = cached_users.draft_projects(user.id)
 
@@ -194,34 +189,22 @@ class TestUsersCache(Test):
 
 
     def test_draft_projects_only_returns_drafts(self):
-        """Test CACHE USERS draft_projects does not return any projects that are not draft
-        (published) or drafts that belong to another user"""
+        """Test CACHE USERS draft_projects does not return any pubished projects
+        or drafts that belong to another user"""
         user = UserFactory.create()
-        published_project = ProjectFactory.create(owner=user)
-        TaskFactory.create(project=published_project)
-        other_users_draft_project = ProjectFactory.create(info={})
+        published_project = ProjectFactory.create(owner=user, published=True)
+        other_users_draft_project = ProjectFactory.create(published=False)
 
         draft_projects = cached_users.draft_projects(user.id)
 
         assert len(draft_projects) == 0, draft_projects
 
 
-    def test_draft_projects_hidden(self):
-        """Test CACHE USERS draft_projects returns a project that belongs to the
-        user and is a draft, even it's marked as hidden"""
-        user = UserFactory.create()
-        hidden_draft_project = ProjectFactory.create(owner=user, hidden=1, info={})
-
-        draft_projects = cached_users.draft_projects(user.id)
-
-        assert len(draft_projects) == 1, draft_projects
-
-
     def test_draft_projects_returns_fields(self):
         """Test CACHE USERS draft_projects returns the info of the projects with
         the required fields"""
         user = UserFactory.create()
-        draft_project = ProjectFactory.create(owner=user, info={})
+        draft_project = ProjectFactory.create(owner=user, published=False)
         fields = ('id', 'name', 'short_name', 'owner_id', 'description',
                  'overall_progress', 'n_tasks', 'n_volunteers', 'info')
 
@@ -231,52 +214,108 @@ class TestUsersCache(Test):
             assert field in draft_project[0].keys(), field
 
 
-    def test_hidden_projects_no_projects(self):
-        """Test CACHE USERS hidden_projects returns empty list if the user has
-        not created any hidden project"""
+    def test_get_leaderboard_no_users_returns_empty_list(self):
+        """Test CACHE USERS get_leaderboard returns an empty list if there are no
+        users"""
+
+        users = cached_users.get_leaderboard(10)
+
+        assert users == [], users
+
+
+    def test_get_leaderboard_returns_users_ordered_by_rank(self):
+        leader = UserFactory.create()
+        second = UserFactory.create()
+        third = UserFactory.create()
+        project = ProjectFactory.create()
+        tasks = TaskFactory.create_batch(3, project=project)
+        i = 3
+        for user in [leader, second, third]:
+            TaskRunFactory.create_batch(i, user=user, task=tasks[i-1])
+            i -= 1
+
+        leaderboard = cached_users.get_leaderboard(3)
+
+        assert leaderboard[0]['id'] == leader.id
+        assert leaderboard[1]['id'] == second.id
+        assert leaderboard[2]['id'] == third.id
+
+
+    def test_get_leaderboard_includes_specific_user_even_is_not_in_top(self):
+        leader = UserFactory.create()
+        second = UserFactory.create()
+        third = UserFactory.create()
+        project = ProjectFactory.create()
+        tasks = TaskFactory.create_batch(3, project=project)
+        i = 3
+        for user in [leader, second, third]:
+            TaskRunFactory.create_batch(i, user=user, task=tasks[i-1])
+            i -= 1
+        user_out_of_top = UserFactory.create()
+
+        leaderboard = cached_users.get_leaderboard(3, user_id=user_out_of_top.id)
+
+        assert len(leaderboard) is 4
+        assert leaderboard[-1]['id'] == user_out_of_top.id
+
+
+    def test_get_leaderboard_returns_fields(self):
+        """Test CACHE USERS get_leaderboard returns user fields"""
         user = UserFactory.create()
+        TaskRunFactory.create(user=user)
+        fields = ('rank', 'id', 'name', 'fullname', 'email_addr',
+                 'info', 'created', 'score')
 
-        hidden_projects = cached_users.hidden_projects(user.id)
-
-        assert hidden_projects == [], hidden_projects
-
-
-    def test_hidden_projects_returns_hidden(self):
-        """Test CACHE USERS hidden_projects returns a list with the user projects that
-        are no drafts but are hidden"""
-        user = UserFactory.create()
-        hidden_project = ProjectFactory.create(owner=user, hidden=1)
-        TaskFactory.create(project=hidden_project)
-
-        hidden_projects = cached_users.hidden_projects(user.id)
-
-        assert len(hidden_projects) == 1, hidden_projects
-        assert hidden_projects[0]['short_name'] == hidden_project.short_name, hidden_projects
-
-
-    def test_hidden_projects_only_returns_hidden(self):
-        """Test CACHE USERS hidden_projects does not return draft (even hidden)
-        or another user's hidden projects"""
-        user = UserFactory.create()
-        another_user_hidden_project = ProjectFactory.create(hidden=1)
-        TaskFactory.create(project=another_user_hidden_project)
-        hidden_draft_project = ProjectFactory.create(owner=user, hidden=1, info={})
-
-        hidden_projects = cached_users.hidden_projects(user.id)
-
-        assert len(hidden_projects) == 0, hidden_projects
-
-
-    def test_hidden_projects_returns_fields(self):
-        """Test CACHE USERS hidden_projects returns the info of the projects with
-        the required fields"""
-        user = UserFactory.create()
-        hidden_project = ProjectFactory.create(owner=user, hidden=1)
-        TaskFactory.create(project=hidden_project)
-        fields = ('id', 'name', 'short_name', 'owner_id', 'description',
-                 'overall_progress', 'n_tasks', 'n_volunteers', 'info')
-
-        hidden_projects = cached_users.hidden_projects(user.id)
+        leaderboard = cached_users.get_leaderboard(1)
 
         for field in fields:
-            assert field in hidden_projects[0].keys(), field
+            assert field in leaderboard[0].keys(), field
+        assert len(leaderboard[0].keys()) == len(fields)
+
+
+    def test_get_total_users_returns_0_if_no_users(self):
+        total_users = cached_users.get_total_users()
+
+        assert total_users == 0, total_users
+
+
+    def test_get_total_users_returns_number_of_users(self):
+        expected_number_of_users = 3
+        UserFactory.create_batch(expected_number_of_users)
+
+        total_users = cached_users.get_total_users()
+
+        assert total_users == expected_number_of_users, total_users
+
+
+    def test_get_users_page_only_returns_users_with_contributions(self):
+        users = UserFactory.create_batch(2)
+        TaskRunFactory.create(user=users[0])
+
+        users_with_contrib = cached_users.get_users_page(1)
+
+        assert len(users_with_contrib) == 1, users_with_contrib
+
+
+    def test_get_users_page_supports_pagination(self):
+        users = UserFactory.create_batch(3)
+        for user in users:
+            TaskRunFactory.create(user=user)
+
+        paginated_users = cached_users.get_users_page(page=2, per_page=1)
+
+        assert len(paginated_users) == 1, paginated_users
+        assert paginated_users[0]['id'] == users[1].id
+
+
+    def test_get_users_page_returns_fields(self):
+        user = UserFactory.create()
+        TaskRunFactory.create(user=user)
+        fields = ('id', 'name', 'fullname', 'email_addr', 'created',
+                  'task_runs', 'info', 'registered_ago')
+
+        users = cached_users.get_users_page(1)
+
+        for field in fields:
+            assert field in users[0].keys(), field
+        assert len(users[0].keys()) == len(fields)

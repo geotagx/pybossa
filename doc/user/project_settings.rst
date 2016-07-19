@@ -7,10 +7,12 @@ interface. When you are the owner (also an administrator of the PyBossa server) 
 link in the left local navigation bar of the project will appear with the
 name **Settings**.
 
-.. image:: http://i.imgur.com/IiB0sMG.png
+|
+.. image:: http://i.imgur.com/6l91cyV.png
     :width: 100%
+|
 
-The **Settings** page will give you three basic options:
+The **Settings** page will give you the following options:
 
 #. :ref:`project-details`: here you will be able to change the name
    of the project, the description, icon, etc.
@@ -23,6 +25,8 @@ The **Settings** page will give you three basic options:
 #. :ref:`project-delete`: if you click in this button you will be able to
    completely remove the project from the system. A big warning message
    will be shown before allowing you to delete the project.
+#. :ref:`project-blog`: if you click this button, you will be able to write
+   a new blog post to be shared with the volunteers.
 
 .. _project-details:
 
@@ -48,21 +52,19 @@ In this section you can change the following parameters of your project:
   authenticated users can participate in all the projects, however
   you can change it to only allow authenticated volunteers to
   participate.
-* **Password**: If you want to control who can contribute to your project, you
-  can set a password here to share with those you allow to do it. If you leave
-  it blank, then no password will protect your project!
+* **Password**: If you want to control who can contribute or access to your
+  project, you can set a password here to share with those you allow to do it.
+  If you leave it blank, then no password will protect your project!
 * **Category**: Select a category that fits your project.
   :ref:`categories`
   are added and managed by the server :ref:`administrators`.
-* **Hide**: tick this field, if you want to hide the project from the
-  public listings. You will be the only one with access to it (except admin
-  users).
 * In addition, you will be able to select and upload an **image** from your
   local computer to set it as the project image thoroughout the server.
 
-.. image:: http://i.imgur.com/DH8Qa8c.png
+|
+.. image:: http://i.imgur.com/ZbPoM3f.png
     :width: 100%
-
+|
 .. _`Markdown`: http://daringfireball.net/projects/markdown/
 
 .. _task-settings:
@@ -74,8 +76,10 @@ The *Task Settings* is only accessible for the project owner and server
 administrators. The page can be reached via the **Settings** menu, but also
 from the **Tasks** link in the left local navigation bar. 
 
-.. image:: http://i.imgur.com/znVy3ON.png
+|
+.. image:: http://i.imgur.com/HsZvKBy.png
     :width: 100%
+|
 
 The page shows four different blocks:
 
@@ -95,8 +99,10 @@ Task Scheduler
 PyBossa provides different task scheduler that will send tasks to the users in
 very different ways. 
 
-.. image:: http://i.imgur.com/1KeSido.png
+|
+.. image:: http://i.imgur.com/CmIylfr.png
     :width: 100%
+|
 
 Default or Depth First
 ~~~~~~~~~~~~~~~~~~~~~~
@@ -183,8 +189,10 @@ Task Priority
 PyBossa allows you to prioritize the tasks, or in other words, which tasks
 should be delivered first to the volunteers.
 
-.. image:: http://i.imgur.com/gay8VAw.png
+|
+.. image:: http://i.imgur.com/drWV1re.png
     :width: 100%
+|
 
 .. note::
     **Important**: Task Priority is only respected by the default scheduler.
@@ -216,8 +224,10 @@ between a minimum of 1 or a maximum of 10000 answers per task. We recommend to
 have at use at least 3 answers per task, otherwise you will not be able to run
 a proper analysis on a given task if two uses answer different. 
 
-.. image:: http://i.imgur.com/rDrG8Bp.png
+|
+.. image:: http://i.imgur.com/VaEI5GK.png
     :width: 100%
+|
 
 For example, imagine that the goal of the task is to answer if you see a human 
 in a picture, and the available answers are Yes and No. If you set up the
@@ -234,12 +244,17 @@ Delete Tasks
 This section will allow you to complete remove all the Tasks and associated
 Task Runs (answers) of your project.
 
-.. image:: http://i.imgur.com/VmUeaWq.png
+|
+.. image:: http://i.imgur.com/JS4J5D0.png
     :width: 100%
+|
 
 .. note::
     This step cannot be undone, once you delete all the tasks and associated
     task runs they will be lost forever.
+
+.. note::
+    **Only tasks not associated with a result can be deleted.**
 
 This feature is useful when you are testing your project, and you are
 deciding the structure that you are going to build in your answers.
@@ -254,26 +269,28 @@ allows to schedule a background job that will automatically import tasks every
 24 hours. This option is accessible from the **Tasks** link in the left local
 navigation bar:
 
-.. image:: http://i.imgur.com/0bNR60P.png
+|
+.. image:: http://i.imgur.com/HCuQDLJ.png
+|
 
 Tasks can be imported using any of the PyBossa built-in importers, such
 as :ref:`csv-import` and :ref:`epicollect-import`. To set up an autoimporter,
-please refer to the instructions for :ref:`csv-import`, :ref:`epicollect-import`
-or :ref:`flickr-import`, as the procedure is the same:
+please refer to the instructions for :ref:`csv-import`, :ref:`epicollect-import`,
+:ref:`flickr-import` or :ref:`twitter-import`, as the procedure is the same:
 
-.. image:: http://i.imgur.com/nvTP7aX.png
+|
+.. image:: http://i.imgur.com/iaJHMtY.png
+|
 
 The only difference is that the tasks won't be imported only once, but regularly,
 as explained. However, the same behaviour should be expected, so autoimporting a
 CSV file that does not change will result in no new tasks being imported.
 
 .. note::
-    The Dropbox importer is not currently available for using as an autoimporter.
+    The Dropbox, Amazon S3 and Youtube importers are not available for being used as an
+    autoimporter.
 
-Once an autoimporter has been set up, it can also be cancelled anytime:
-
-.. image:: http://i.imgur.com/gu6CJG0.png
-
+Once an autoimporter has been set up, it can also be cancelled anytime. Just delete it.
 And a new one can then be created.
 
 .. _project-delete:
@@ -284,8 +301,13 @@ Delete the project
 In case that you want to completely remove the project and all its tasks
 and task runs, use this section to delete the project.
 
-.. image:: http://i.imgur.com/Et4EAyj.png
+|
+.. image:: http://i.imgur.com/JFAQHu0.png
     :width: 100%
+|
 
 .. note::
     This action cannot be undone, so be sure before proceeding.
+
+.. note::
+    Only projects without results can be deleted.

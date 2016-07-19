@@ -1,7 +1,7 @@
 # -*- coding: utf8 -*-
 # This file is part of PyBossa.
 #
-# Copyright (C) 2013 SF Isle of Man Limited
+# Copyright (C) 2015 SciFabric LTD.
 #
 # PyBossa is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as published by
@@ -20,7 +20,7 @@
 from sqlalchemy.sql import text
 from pybossa.core import db
 from pybossa.cache import memoize, ONE_HOUR
-from pybossa.cache.projects import overall_progress
+from pybossa.cache.projects import overall_progress, n_results
 
 
 session = db.slave_session
@@ -65,14 +65,17 @@ def check_contributing_state(project, user_id=None, user_ip=None):
     contribute more to it or not.
     """
     project_id = project['id'] if type(project) == dict else project.id
-    states = ('completed', 'draft', 'can_contribute', 'cannot_contribute')
+    published = project['published'] if type(project) == dict else project.published
+    states = ('completed', 'draft', 'publish', 'can_contribute', 'cannot_contribute')
     if overall_progress(project_id) >= 100:
         return states[0]
-    if _has_no_presenter(project) or _has_no_tasks(project_id):
-        return states[1]
-    if n_available_tasks(project_id, user_id=user_id, user_ip=user_ip) > 0:
+    if not published:
+        if has_no_presenter(project) or _has_no_tasks(project_id):
+            return states[1]
         return states[2]
-    return states[3]
+    if n_available_tasks(project_id, user_id=user_id, user_ip=user_ip) > 0:
+        return states[3]
+    return states[4]
 
 
 def add_custom_contrib_button_to(project, user_id_or_ip):
@@ -81,16 +84,27 @@ def add_custom_contrib_button_to(project, user_id_or_ip):
         project = project.dictize()
     project['contrib_button'] = check_contributing_state(project,
                                                          **user_id_or_ip)
+    query = text('''
+                 SELECT COUNT(id) as ct from blogpost
+                 WHERE project_id=:project_id;
+                 ''')
+    results = session.execute(query, dict(project_id=project['id']))
+    for row in results:
+        project['n_blogposts'] = row.ct
+
+    project['n_results'] = n_results(project['id'])
+
     return project
 
 
-def _has_no_presenter(project):
+def has_no_presenter(project):
     """Return if a project has no presenter."""
+    empty_presenters = ('', None)
     try:
-        return 'task_presenter' not in project.info
+        return not project.has_presenter()
     except AttributeError:
         try:
-            return 'task_presenter' not in project.get('info')
+            return project.get('info').get('task_presenter') in empty_presenters
         except AttributeError:
             return True
 

@@ -1,7 +1,7 @@
 # -*- coding: utf8 -*-
 # This file is part of PyBossa.
 #
-# Copyright (C) 2013 SF Isle of Man Limited
+# Copyright (C) 2015 SciFabric LTD.
 #
 # PyBossa is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as published by
@@ -35,9 +35,8 @@ class ProjectFactory(BaseFactory):
     short_name = factory.Sequence(lambda n: u'✓project%d' % n)
     description = u'Project description utf8=✓'
     allow_anonymous_contributors = True
-    long_tasks = 0
-    hidden = 0
     featured = False
+    published = True
     webhook = None
     owner = factory.SubFactory('factories.UserFactory')
     owner_id = factory.LazyAttribute(lambda project: project.owner.id)

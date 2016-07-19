@@ -1,7 +1,7 @@
 # -*- coding: utf8 -*-
 # This file is part of PyBossa.
 #
-# Copyright (C) 2014 SF Isle of Man Limited
+# Copyright (C) 2015 SciFabric LTD.
 #
 # PyBossa is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as published by
@@ -16,7 +16,6 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with PyBossa.  If not, see <http://www.gnu.org/licenses/>.
 """Cache module for site statistics."""
-import json
 import pygeoip
 from sqlalchemy.sql import text
 from flask import current_app
@@ -79,14 +78,28 @@ def n_task_runs_site():
     return n_task_runs or 0
 
 
+@cache(timeout=ONE_DAY, key_prefix="site_n_results")
+def n_results_site():
+    """Return number of results in the server."""
+    sql = text('''
+               SELECT COUNT(id) AS n_results FROM result
+               WHERE info IS NOT NULL
+               AND cast(info AS TEXT) != 'null'
+               AND cast(info AS TEXT) != '';
+               ''')
+    results = session.execute(sql)
+    for row in results:
+        n_results = row.n_results
+    return n_results or 0
+
+
 @cache(timeout=ONE_DAY, key_prefix="site_top5_apps_24_hours")
 def get_top5_projects_24_hours():
     """Return the top 5 projects more active in the last 24 hours."""
-    # Top 5 Most active apps in last 24 hours
+    # Top 5 Most active projects in last 24 hours
     sql = text('''SELECT project.id, project.name, project.short_name, project.info,
                COUNT(task_run.project_id) AS n_answers FROM project, task_run
                WHERE project.id=task_run.project_id
-               AND project.hidden=0
                AND DATE(task_run.finish_time) > NOW() - INTERVAL '24 hour'
                AND DATE(task_run.finish_time) <= NOW()
                GROUP BY project.id
@@ -96,7 +109,7 @@ def get_top5_projects_24_hours():
     top5_apps_24_hours = []
     for row in results:
         tmp = dict(id=row.id, name=row.name, short_name=row.short_name,
-                   info=dict(json.loads(row.info)), n_answers=row.n_answers)
+                   info=row.info, n_answers=row.n_answers)
         top5_apps_24_hours.append(tmp)
     return top5_apps_24_hours
 
@@ -124,9 +137,9 @@ def get_top5_users_24_hours():
 
 
 @cache(timeout=ONE_DAY, key_prefix="site_locs")
-def get_locs():  # pragma: no cover
+def get_locs():
     """Return locations (latitude, longitude) for anonymous users."""
-    # All IP addresses from anonymous users to create a map
+    # All IP addresses from anonymous users
     locs = []
     if current_app.config['GEO']:
         sql = '''SELECT DISTINCT(user_ip) FROM task_run

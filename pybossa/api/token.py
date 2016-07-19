@@ -1,7 +1,7 @@
 # -*- coding: utf8 -*-
 # This file is part of PyBossa.
 #
-# Copyright (C) 2014 SF Isle of Man Limited
+# Copyright (C) 2015 SciFabric LTD.
 #
 # PyBossa is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as published by
@@ -31,6 +31,7 @@ from pybossa.ratelimit import ratelimit
 from api_base import APIBase, error
 from pybossa.auth import ensure_authorized_to
 
+
 class TokenAPI(APIBase):
 
     """
@@ -58,13 +59,11 @@ class TokenAPI(APIBase):
                 target=self._resource_name,
                 action='GET')
 
-
     def _get_token(self, token, user_tokens):
         token = '%s_token' % token
         if token in user_tokens:
             return {token: user_tokens[token]}
         raise NotFound
-
 
     def _get_all_tokens(self):
         tokens = {}
@@ -74,7 +73,6 @@ class TokenAPI(APIBase):
                 tokens['%s_token' % provider] = token
         return tokens
 
-
     def _create_token_for(self, provider):
         token_value = dict(current_user.info).get(provider)
         if token_value:
@@ -83,8 +81,6 @@ class TokenAPI(APIBase):
                 token['oauth_token_secret'] = token_value['oauth_token_secret']
             return token
         return None
-
-
 
     def post(self):
         raise MethodNotAllowed(valid_methods=['GET'])

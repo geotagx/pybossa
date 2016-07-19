@@ -1,7 +1,7 @@
 # -*- coding: utf8 -*-
 # This file is part of PyBossa.
 #
-# Copyright (C) 2014 SF Isle of Man Limited
+# Copyright (C) 2015 SciFabric LTD.
 #
 # PyBossa is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as published by
@@ -22,13 +22,13 @@ This package adds GET, POST, PUT and DELETE methods for:
     * projects,
 
 """
-from werkzeug.exceptions import BadRequest
+from werkzeug.exceptions import BadRequest, Forbidden
 from flask.ext.login import current_user
 from api_base import APIBase
 from pybossa.model.project import Project
 from pybossa.cache.categories import get_all as get_categories
 from pybossa.util import is_reserved_name
-from pybossa.core import auditlog_repo
+from pybossa.core import auditlog_repo, result_repo
 from pybossa.auditlogger import AuditLogger
 
 auditlogger = AuditLogger(auditlog_repo, caller='api')
@@ -44,7 +44,8 @@ class ProjectAPI(APIBase):
     """
 
     __class__ = Project
-    reserved_keys = set(['id', 'created', 'updated', 'completed', 'contacted'])
+    reserved_keys = set(['id', 'created', 'updated', 'completed', 'contacted',
+                         'published'])
 
     def _create_instance_from_request(self, data):
         inst = super(ProjectAPI, self)._create_instance_from_request(data)
@@ -67,4 +68,6 @@ class ProjectAPI(APIBase):
     def _forbidden_attributes(self, data):
         for key in data.keys():
             if key in self.reserved_keys:
+                if key == 'published':
+                    raise Forbidden('You cannot publish a project via the API')
                 raise BadRequest("Reserved keys in payload")

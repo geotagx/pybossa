@@ -1,7 +1,7 @@
 # -*- coding: utf8 -*-
 # This file is part of PyBossa.
 #
-# Copyright (C) 2014 SF Isle of Man Limited
+# Copyright (C) 2015 SciFabric LTD.
 #
 # PyBossa is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as published by
@@ -73,7 +73,7 @@ class Uploader(object):
             m = BytesIO()
             im = Image.open(file)
             target = im.crop(coordinates)
-            target = target.resize(self.size, Image.ANTIALIAS)
+            # target = target.resize(self.size, Image.ANTIALIAS)
             # Scale down the image to Indexed mode
             scale_down_img = target.convert('P', colors=255, palette=Image.ADAPTIVE)
             scale_down_img.save(m, format=extension)

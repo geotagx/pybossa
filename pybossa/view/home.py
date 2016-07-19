@@ -1,7 +1,7 @@
 # -*- coding: utf8 -*-
 # This file is part of PyBossa.
 #
-# Copyright (C) 2013 SF Isle of Man Limited
+# Copyright (C) 2015 SciFabric LTD.
 #
 # PyBossa is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as published by
@@ -16,7 +16,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with PyBossa.  If not, see <http://www.gnu.org/licenses/>.
 """Home view for PyBossa."""
-from flask import current_app
+from flask import current_app, abort
 from flask.ext.login import current_user
 from pybossa.model.category import Category
 from flask import Blueprint
@@ -24,6 +24,8 @@ from flask import render_template
 from pybossa.cache import projects as cached_projects
 from pybossa.cache import users as cached_users
 from pybossa.cache import categories as cached_cat
+from pybossa.util import rank
+from jinja2.exceptions import TemplateNotFound
 
 
 blueprint = Blueprint('home', __name__)
@@ -45,21 +47,21 @@ def home():
     d['categories_projects'] = {}
     for c in categories:
         tmp_projects = cached_projects.get(c['short_name'], page, per_page)
-        d['categories_projects'][c['short_name']] = tmp_projects
+        d['categories_projects'][c['short_name']] = rank(tmp_projects)
 
     # Add featured
     tmp_projects = cached_projects.get_featured('featured', page, per_page)
     if len(tmp_projects) > 0:
         featured = Category(name='Featured', short_name='featured')
         d['categories'].insert(0, featured)
-        d['categories_projects']['featured'] = tmp_projects
+        d['categories_projects']['featured'] = rank(tmp_projects)
 
     if (current_app.config['ENFORCE_PRIVACY']
             and current_user.is_authenticated()):
         if current_user.admin:
-            d['top_users'] = cached_users.get_top()
+            d['top_users'] = cached_users.get_leaderboard(10)
     if not current_app.config['ENFORCE_PRIVACY']:
-        d['top_users'] = cached_users.get_top()
+        d['top_users'] = cached_users.get_leaderboard(10)
     return render_template('/home/index.html', **d)
 
 
@@ -73,3 +75,11 @@ def about():
 def search():
     """Render search results page."""
     return render_template("/home/search.html")
+
+@blueprint.route("results")
+def result():
+    """Render a results page."""
+    try:
+        return render_template("/home/_results.html")
+    except TemplateNotFound:
+        return abort(404)

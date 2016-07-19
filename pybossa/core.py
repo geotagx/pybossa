@@ -1,7 +1,7 @@
 # -*- coding: utf8 -*-
 # This file is part of PyBossa.
 #
-# Copyright (C) 2015 SF Isle of Man Limited
+# Copyright (C) 2015 SciFabric LTD.
 #
 # PyBossa is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as published by
@@ -18,21 +18,26 @@
 """Core module for PyBossa."""
 import os
 import logging
+import humanize
 from flask import Flask, url_for, request, render_template, \
     flash, _app_ctx_stack
 from flask.ext.login import current_user
 from flask.ext.babel import gettext
+from flask.ext.assets import Bundle
 from pybossa import default_settings as settings
 from pybossa.extensions import *
 from pybossa.ratelimit import get_view_rate_limit
 from raven.contrib.flask import Sentry
 from pybossa.util import pretty_date
+from pybossa.news import FEED_KEY as NEWS_FEED_KEY
+from pybossa.news import get_news
 
 
 def create_app(run_as_server=True):
     """Create web app."""
     app = Flask(__name__)
     configure_app(app)
+    setup_assets(app)
     setup_cache_timeouts(app)
     setup_ratelimits(app)
     setup_theme(app)
@@ -62,8 +67,10 @@ def create_app(run_as_server=True):
     setup_debug_toolbar(app)
     setup_jinja2_filters(app)
     setup_newsletter(app)
+    setup_sse(app)
     plugin_manager.init_app(app)
     plugin_manager.install_plugins()
+    import pybossa.model.event_listeners
     return app
 
 
@@ -86,6 +93,15 @@ def configure_app(app):
         print "Slave binds are misssing, adding Master as slave too."
         app.config['SQLALCHEMY_BINDS'] = \
             dict(slave=app.config.get('SQLALCHEMY_DATABASE_URI'))
+
+
+def setup_sse(app):
+    if app.config['SSE']:
+        msg = "WARNING: async mode is required as Server Sent Events are enabled."
+        app.logger.warning(msg)
+    else:
+        msg = "INFO: async mode is disabled."
+        app.logger.info(msg)
 
 
 def setup_theme(app):
@@ -155,16 +171,22 @@ def setup_repositories():
     from pybossa.repositories import BlogRepository
     from pybossa.repositories import TaskRepository
     from pybossa.repositories import AuditlogRepository
+    from pybossa.repositories import WebhookRepository
+    from pybossa.repositories import ResultRepository
     global user_repo
     global project_repo
     global blog_repo
     global task_repo
     global auditlog_repo
+    global webhook_repo
+    global result_repo
     user_repo = UserRepository(db)
     project_repo = ProjectRepository(db)
     blog_repo = BlogRepository(db)
     task_repo = TaskRepository(db)
     auditlog_repo = AuditlogRepository(db)
+    webhook_repo = WebhookRepository(db)
+    result_repo = ResultRepository(db)
 
 
 def setup_error_email(app):
@@ -215,13 +237,17 @@ def setup_babel(app):
 
     @babel.localeselector
     def _get_locale():
+        locales = [l[0] for l in app.config.get('LOCALES')]
         if current_user.is_authenticated():
             lang = current_user.locale
         else:
             lang = request.cookies.get('language')
         if (lang is None or lang == '' or
-                lang.lower() not in app.config['LOCALES']):
-            lang = 'en'
+            lang.lower() not in locales):
+            lang = request.accept_languages.best_match(locales)
+        if (lang is None or lang == '' or
+                lang.lower() not in locales):
+            lang = app.config.get('DEFAULT_LOCALE') or 'en'
         return lang.lower()
     return babel
 
@@ -238,6 +264,7 @@ def setup_blueprints(app):
     from pybossa.view.help import blueprint as helper
     from pybossa.view.home import blueprint as home
     from pybossa.view.uploads import blueprint as uploads
+    from pybossa.view.amazon import blueprint as amazon
 
     blueprints = [{'handler': home, 'url_prefix': '/'},
                   {'handler': api,  'url_prefix': '/api'},
@@ -249,13 +276,12 @@ def setup_blueprints(app):
                   {'handler': helper, 'url_prefix': '/help'},
                   {'handler': stats, 'url_prefix': '/stats'},
                   {'handler': uploads, 'url_prefix': '/uploads'},
+                  {'handler': amazon, 'url_prefix': '/amazon'},
                   ]
 
     for bp in blueprints:
         app.register_blueprint(bp['handler'], url_prefix=bp['url_prefix'])
 
-    # The RQDashboard is actually registering a blueprint to the app, so this is
-    # a propper place for it to be initialized
     from rq_dashboard import RQDashboard
     RQDashboard(app, url_prefix='/admin/rq', auth_handler=current_user,
                 redis_conn=sentinel.master)
@@ -263,6 +289,16 @@ def setup_blueprints(app):
 
 def setup_external_services(app):
     """Setup external services."""
+    setup_twitter_login(app)
+    setup_facebook_login(app)
+    setup_google_login(app)
+    setup_flickr_importer(app)
+    setup_dropbox_importer(app)
+    setup_twitter_importer(app)
+    setup_youtube_importer(app)
+
+
+def setup_twitter_login(app):
     try:  # pragma: no cover
         if (app.config['TWITTER_CONSUMER_KEY'] and
                 app.config['TWITTER_CONSUMER_SECRET']):
@@ -275,9 +311,10 @@ def setup_external_services(app):
         print inst
         print "Twitter signin disabled"
         log_message = 'Twitter signin disabled: %s' % str(inst)
-        app.logger.error(log_message)
+        app.logger.info(log_message)
 
-    # Enable Facebook if available
+
+def setup_facebook_login(app):
     try:  # pragma: no cover
         if (app.config['FACEBOOK_APP_ID']
                 and app.config['FACEBOOK_APP_SECRET']):
@@ -290,9 +327,10 @@ def setup_external_services(app):
         print inst
         print "Facebook signin disabled"
         log_message = 'Facebook signin disabled: %s' % str(inst)
-        app.logger.error(log_message)
+        app.logger.info(log_message)
 
-    # Enable Google if available
+
+def setup_google_login(app):
     try:  # pragma: no cover
         if (app.config['GOOGLE_CLIENT_ID']
                 and app.config['GOOGLE_CLIENT_SECRET']):
@@ -305,24 +343,28 @@ def setup_external_services(app):
         print inst
         print "Google signin disabled"
         log_message = 'Google signin disabled: %s' % str(inst)
-        app.logger.error(log_message)
+        app.logger.info(log_message)
 
-    # Enable Flickr if available
+
+def setup_flickr_importer(app):
     try:  # pragma: no cover
         if (app.config['FLICKR_API_KEY']
                 and app.config['FLICKR_SHARED_SECRET']):
             flickr.init_app(app)
             from pybossa.view.flickr import blueprint as flickr_bp
             app.register_blueprint(flickr_bp, url_prefix='/flickr')
+            importer_params = {'api_key': app.config['FLICKR_API_KEY']}
+            importer.register_flickr_importer(importer_params)
     except Exception as inst:  # pragma: no cover
         print type(inst)
         print inst.args
         print inst
         print "Flickr importer not available"
         log_message = 'Flickr importer not available: %s' % str(inst)
-        app.logger.error(log_message)
+        app.logger.info(log_message)
 
-    # Enable Dropbox if available
+
+def setup_dropbox_importer(app):
     try:  # pragma: no cover
         if app.config['DROPBOX_APP_KEY']:
             importer.register_dropbox_importer()
@@ -332,8 +374,40 @@ def setup_external_services(app):
         print inst
         print "Dropbox importer not available"
         log_message = 'Dropbox importer not available: %s' % str(inst)
-        app.logger.error(log_message)
+        app.logger.info(log_message)
 
+
+def setup_twitter_importer(app):
+    try:  # pragma: no cover
+        if (app.config['TWITTER_CONSUMER_KEY'] and
+                app.config['TWITTER_CONSUMER_SECRET']):
+            importer_params = {
+                'consumer_key': app.config['TWITTER_CONSUMER_KEY'],
+                'consumer_secret': app.config['TWITTER_CONSUMER_SECRET']
+            }
+            importer.register_twitter_importer(importer_params)
+    except Exception as inst:  # pragma: no cover
+        print type(inst)
+        print inst.args
+        print inst
+        print "Twitter importer not available"
+        log_message = 'Twitter importer not available: %s' % str(inst)
+        app.logger.info(log_message)
+
+def setup_youtube_importer(app):
+    try:  # pragma: no cover
+        if app.config['YOUTUBE_API_SERVER_KEY']:
+            importer_params = {
+                'youtube_api_server_key': app.config['YOUTUBE_API_SERVER_KEY']
+            }
+            importer.register_youtube_importer(importer_params)
+    except Exception as inst:  # pragma: no cover
+        print type(inst)
+        print inst.args
+        print inst
+        print "Youtube importer not available"
+        log_message = 'Youtube importer not available: %s' % str(inst)
+        app.logger.info(log_message)
 
 def setup_geocoding(app):
     """Setup geocoding."""
@@ -404,10 +478,19 @@ def setup_hooks(app):
 
     @app.context_processor
     def _global_template_context():
+        notify_admin = False
         if current_user and current_user.is_authenticated():
             if current_user.email_addr == current_user.name:
                 flash(gettext("Please update your e-mail address in your"
                       " profile page, right now it is empty!"), 'error')
+        if (current_user and current_user.is_authenticated()
+            and current_user.admin):
+            key = NEWS_FEED_KEY + str(current_user.id)
+            if sentinel.slave.get(key):
+                notify_admin = True
+            news = get_news()
+        else:
+            news = None
 
         # Cookies warning
         cookie_name = app.config['BRAND'] + "_accept_cookies"
@@ -437,6 +520,9 @@ def setup_hooks(app):
         else:
             contact_twitter = 'PyBossa'
 
+        # Available plugins
+        plugins = plugin_manager.plugins
+
         return dict(
             brand=app.config['BRAND'],
             title=app.config['TITLE'],
@@ -451,7 +537,10 @@ def setup_hooks(app):
             show_cookies_warning=show_cookies_warning,
             contact_email=contact_email,
             contact_twitter=contact_twitter,
-            upload_method=app.config['UPLOAD_METHOD'])
+            upload_method=app.config['UPLOAD_METHOD'],
+            news=news,
+            notify_admin=notify_admin,
+            plugins=plugins)
 
 
 def setup_jinja2_filters(app):
@@ -477,6 +566,10 @@ def setup_jinja2_filters(app):
     except IOError as inst:
         log_message = 'Custom Filter definition file not available : %s' % str(inst)
         app.logger.error(log_message)
+
+    @app.template_filter('humanize_intword')
+    def _humanize_intword(obj):
+        return humanize.intword(obj)
 
 
 def setup_csrf_protection(app):
@@ -534,7 +627,7 @@ def setup_scheduled_jobs(app):  # pragma: no cover
     JOBS = [dict(name=enqueue_periodic_jobs, args=['super'], kwargs={},
                  interval=(10 * MINUTE), timeout=(10 * MINUTE)),
             dict(name=enqueue_periodic_jobs, args=['high'], kwargs={},
-                 interval=HOUR, timeout=(10 * MINUTE)),
+                 interval=(1 * HOUR), timeout=(10 * MINUTE)),
             dict(name=enqueue_periodic_jobs, args=['medium'], kwargs={},
                  interval=(12 * HOUR), timeout=(10 * MINUTE)),
             dict(name=enqueue_periodic_jobs, args=['low'], kwargs={},
@@ -553,3 +646,9 @@ def setup_newsletter(app):
     """Setup mailchimp newsletter."""
     if app.config.get('MAILCHIMP_API_KEY'):
         newsletter.init_app(app)
+
+
+def setup_assets(app):
+    """Setup assets."""
+    from flask.ext.assets import Environment
+    assets = Environment(app)

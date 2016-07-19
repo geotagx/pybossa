@@ -1,7 +1,7 @@
 # -*- coding: utf8 -*-
 # This file is part of PyBossa.
 #
-# Copyright (C) 2013 SF Isle of Man Limited
+# Copyright (C) 2015 SciFabric LTD.
 #
 # PyBossa is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as published by
@@ -28,7 +28,6 @@ This module exports the following endpoints:
 """
 from itsdangerous import BadData
 from markdown import markdown
-import json
 import time
 
 from flask import Blueprint, request, url_for, flash, redirect, abort
@@ -46,31 +45,14 @@ from pybossa.cache import users as cached_users
 from pybossa.auth import ensure_authorized_to
 from pybossa.jobs import send_mail
 from pybossa.core import user_repo
+from pybossa.feed import get_update_feed
 
 from pybossa.forms.account_view_forms import *
-
-try:
-    import cPickle as pickle
-except ImportError:  # pragma: no cover
-    import pickle
 
 
 blueprint = Blueprint('account', __name__)
 
 mail_queue = Queue('super', connection=sentinel.master)
-
-
-def get_update_feed():
-    """Return update feed list."""
-    data = sentinel.slave.zrevrange('pybossa_feed', 0, 99, withscores=True)
-    update_feed = []
-    for u in data:
-        tmp = pickle.loads(u[0])
-        tmp['updated'] = u[1]
-        if tmp.get('info') and type(tmp.get('info')) == unicode:
-            tmp['info'] = json.loads(tmp['info'])
-        update_feed.append(tmp)
-    return update_feed
 
 
 @blueprint.route('/', defaults={'page': 1})
@@ -92,7 +74,7 @@ def index(page):
     if current_user.is_authenticated():
         user_id = current_user.id
     else:
-        user_id = 'anonymous'
+        user_id = None
     top_users = cached_users.get_leaderboard(current_app.config['LEADERBOARD'],
                                              user_id)
     return render_template('account/index.html', accounts=accounts,
@@ -268,7 +250,7 @@ def newsletter_subscribe():
 
 @blueprint.route('/register/confirmation', methods=['GET'])
 def confirm_account():
-    """Confir account endpoint."""
+    """Confirm account endpoint."""
     key = request.args.get('key')
     if key is None:
         abort(403)
@@ -334,8 +316,8 @@ def _show_public_profile(user):
     projects_contributed = cached_users.projects_contributed_cached(user.id)
     projects_created = cached_users.published_projects_cached(user.id)
     if current_user.is_authenticated() and current_user.admin:
-        projects_hidden = cached_users.hidden_projects(user.id)
-        projects_created.extend(projects_hidden)
+        draft_projects = cached_users.draft_projects(user.id)
+        projects_created.extend(draft_projects)
     title = "%s &middot; User Profile" % user_dict['fullname']
     return render_template('/account/public_profile.html',
                            title=title,
@@ -351,7 +333,6 @@ def _show_own_profile(user):
     user.total = cached_users.get_total_users()
     projects_contributed = cached_users.projects_contributed_cached(user.id)
     projects_published, projects_draft = _get_user_projects(user.id)
-    projects_published.extend(cached_users.hidden_projects(user.id))
     cached_users.get_user_summary(user.name)
 
     return render_template('account/profile.html', title=gettext("Profile"),
@@ -379,7 +360,6 @@ def projects(name):
 
     user = user_repo.get(current_user.id)
     projects_published, projects_draft = _get_user_projects(user.id)
-    projects_published.extend(cached_users.hidden_projects(user.id))
 
     return render_template('account/projects.html',
                            title=gettext("Projects"),
@@ -412,31 +392,43 @@ def update_profile(name):
     # Extend the values
     user.rank = usr.get('rank')
     user.score = usr.get('score')
-    # Creation of forms
-    update_form = UpdateProfileForm(obj=user)
+    if request.form.get('btn') != 'Profile':
+        update_form = UpdateProfileForm(formdata=None, obj=user)
+    else:
+        update_form = UpdateProfileForm(obj=user)
     update_form.set_locales(current_app.config['LOCALES'])
     avatar_form = AvatarUploadForm()
     password_form = ChangePasswordForm()
 
+    title_msg = "Update your profile: %s" % user.fullname
+
     if request.method == 'POST':
         # Update user avatar
+        succeed = False
         if request.form.get('btn') == 'Upload':
-            _handle_avatar_update(user, avatar_form)
+            succeed = _handle_avatar_update(user, avatar_form)
         # Update user profile
         elif request.form.get('btn') == 'Profile':
-            _handle_profile_update(user, update_form)
+            succeed = _handle_profile_update(user, update_form)
         # Update user password
         elif request.form.get('btn') == 'Password':
-            _handle_password_update(user, password_form)
+            succeed = _handle_password_update(user, password_form)
         # Update user external services
         elif request.form.get('btn') == 'External':
-            _handle_external_services_update(user, update_form)
+            succeed = _handle_external_services_update(user, update_form)
         # Otherwise return 415
         else:
             return abort(415)
-        return redirect(url_for('.update_profile', name=user.name))
+        if succeed:
+            return redirect(url_for('.update_profile', name=user.name))
+        else:
+            return render_template('/account/update.html',
+                                   form=update_form,
+                                   upload_form=avatar_form,
+                                   password_form=password_form,
+                                   title=title_msg,
+                                   show_passwd_form=show_passwd_form)
 
-    title_msg = "Update your profile: %s" % user.fullname
     return render_template('/account/update.html',
                            form=update_form,
                            upload_form=avatar_form,
@@ -465,13 +457,15 @@ def _handle_avatar_update(user, avatar_form):
         cached_users.delete_user_summary(user.name)
         flash(gettext('Your avatar has been updated! It may \
                       take some minutes to refresh...'), 'success')
+        return True
     else:
         flash("You have to provide an image file to update your avatar", "error")
+        return False
 
 
 def _handle_profile_update(user, update_form):
     acc_conf_dis = current_app.config.get('ACCOUNT_CONFIRMATION_DISABLED')
-    if update_form.validate():
+    if update_form.validate_on_submit():
         user.id = update_form.id.data
         user.fullname = update_form.fullname.data
         user.name = update_form.name.data
@@ -497,6 +491,7 @@ def _handle_profile_update(user, update_form):
                           new email: %s. Once you verify it, it will \
                           be updated.' % account['email_addr'])
             flash(fls, 'info')
+            return True
         if acc_conf_dis:
             user.email_addr = update_form.email_addr.data
         user.privacy_mode = update_form.privacy_mode.data
@@ -505,8 +500,10 @@ def _handle_profile_update(user, update_form):
         user_repo.update(user)
         cached_users.delete_user_summary(user.name)
         flash(gettext('Your profile has been updated!'), 'success')
+        return True
     else:
         flash(gettext('Please correct the errors'), 'error')
+        return False
 
 
 def _handle_password_update(user, password_form):
@@ -517,12 +514,15 @@ def _handle_password_update(user, password_form):
             user_repo.update(user)
             flash(gettext('Yay, you changed your password succesfully!'),
                   'success')
+            return True
         else:
             msg = gettext("Your current password doesn't match the "
                           "one in our records")
             flash(msg, 'error')
+            return False
     else:
         flash(gettext('Please correct the errors'), 'error')
+        return False
 
 
 def _handle_external_services_update(user, update_form):
@@ -535,8 +535,10 @@ def _handle_external_services_update(user, update_form):
         user_repo.update(user)
         cached_users.delete_user_summary(user.name)
         flash(gettext('Your profile has been updated!'), 'success')
+        return True
     else:
         flash(gettext('Please correct the errors'), 'error')
+        return False
 
 
 @blueprint.route('/reset-password', methods=['GET', 'POST'])

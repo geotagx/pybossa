@@ -1,7 +1,7 @@
 # -*- coding: utf8 -*-
 # This file is part of PyBossa.
 #
-# Copyright (C) 2014 SF Isle of Man Limited
+# Copyright (C) 2015 SciFabric LTD.
 #
 # PyBossa is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as published by
@@ -53,6 +53,7 @@ class GlobalStatsAPI(APIBase):
                     n_users=n_users,
                     n_task_runs=stats.n_task_runs_site(),
                     n_pending_tasks=n_pending_tasks,
+                    n_results=stats.n_results_site(),
                     categories=[])
         # Add Categories
         categories = cached_categories.get_used()

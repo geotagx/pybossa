@@ -131,7 +131,7 @@ Therefore, adding tasks to your project is as simple as this command:
 
 .. code-block:: bash
 
-    pbs add_tasks --tasks-file tasks_file.json --tasks-type=json
+    pbs add_tasks --tasks-file tasks_file.json
 
 If you want to see all the available
 options, please check the **--help** command:
@@ -163,6 +163,7 @@ That command needs to have in the same folder where you are running it, the
 following files:
 
  * template.html
+ * results.html
  * long_description.md
  * tutorial.html
 
@@ -199,3 +200,7 @@ options, please check the **--help** command:
 .. code-block:: bash
 
     pbs delete_tasks --help
+
+
+.. note::
+    **Only tasks that are not associated with a result will be deleted.**

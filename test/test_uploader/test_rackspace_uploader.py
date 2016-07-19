@@ -1,7 +1,7 @@
 # -*- coding: utf8 -*-
 # This file is part of PyBossa.
 #
-# Copyright (C) 2014 SF Isle of Man Limited
+# Copyright (C) 2015 SciFabric LTD.
 #
 # PyBossa is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as published by
@@ -158,7 +158,7 @@ class TestRackspaceUploader(Test):
     @patch('pybossa.uploader.rackspace.url_for', return_value='/static/img/placeholder.user.png')
     def test_rackspace_uploader_lookup_url(self, mock1, mock2):
         """Test RACKSPACE UPLOADER lookup returns a valid link."""
-        uri = 'http://rackspace.com'
+        uri = 'https://rackspace.com'
         filename = 'test.jpg'
         with patch('pybossa.uploader.rackspace.pyrax.cloudfiles') as mycf:
             cdn_enabled_mock = PropertyMock(return_value=True)
@@ -189,7 +189,7 @@ class TestRackspaceUploader(Test):
             u.init_app(self.flask_app)
             res = u._lookup_url('rackspace', {'filename': filename,
                                               'container': 'user_3'})
-            url = 'http://rackspace.com/test.jpg'
+            url = 'https://rackspace.com/test.jpg'
             err_msg = "We should get the %s but we got %s " % (url, res)
             assert res == url, err_msg
             calls = [call.make_public()]

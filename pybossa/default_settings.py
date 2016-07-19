@@ -1,7 +1,7 @@
 # -*- coding: utf8 -*-
 # This file is part of PyBossa.
 #
-# Copyright (C) 2013 SF Isle of Man Limited
+# Copyright (C) 2015 SciFabric LTD.
 #
 # PyBossa is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as published by
@@ -35,7 +35,10 @@ DESCRIPTION = 'Set the description in your config'
 TERMSOFUSE = 'http://okfn.org/terms-of-use/'
 DATAUSE = 'http://opendatacommons.org/licenses/by/'
 LOGO = ''
-LOCALES = ['en', 'es']
+DEFAULT_LOCALE = 'en'
+LOCALES = [('en', 'English'), ('es', u'Español'),
+           ('it', 'Italiano'), ('fr', u'Français'),
+           ('ja', u'日本語'), ('el', u'ελληνικά')]
 
 ## Default THEME
 THEME = 'default'
@@ -106,3 +109,21 @@ PER = 15 * 60
 
 # Disable new account confirmation (via email)
 ACCOUNT_CONFIRMATION_DISABLED = True
+
+# Send emails weekly update every
+WEEKLY_UPDATE_STATS = 'Sunday'
+
+# Enable Server Sent Events
+SSE = False
+
+# Pro user features. False will make the feature available to all regular users,
+# while True will make it available only to pro users
+PRO_FEATURES = {
+    'auditlog':              True,
+    'webhooks':              True,
+    'updated_exports':       True,
+    'notify_blog_updates':   True,
+    'project_weekly_report': True,
+    'autoimporter':          True,
+    'better_stats':          True
+}

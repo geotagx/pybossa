@@ -1,7 +1,7 @@
 # -*- coding: utf8 -*-
 # This file is part of PyBossa.
 #
-# Copyright (C) 2014 SF Isle of Man Limited
+# Copyright (C) 2015 SciFabric LTD.
 #
 # PyBossa is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as published by
@@ -20,8 +20,11 @@
 from default import Test, db
 from nose.tools import assert_raises
 from factories import TaskFactory, TaskRunFactory, ProjectFactory
-from pybossa.repositories import TaskRepository
+from pybossa.repositories import TaskRepository, ProjectRepository
 from pybossa.exc import WrongObjectError, DBIntegrityError
+from pybossa.model.task import Task
+
+project_repo = ProjectRepository(db)
 
 
 class TestTaskRepositoryForTaskQueries(Test):
@@ -30,6 +33,108 @@ class TestTaskRepositoryForTaskQueries(Test):
         super(TestTaskRepositoryForTaskQueries, self).setUp()
         self.task_repo = TaskRepository(db)
 
+
+    def test_handle_info_json_plain_text(self):
+        """Test handle info in JSON as plain text works."""
+        TaskFactory.create(info='answer')
+        res = self.task_repo.filter_tasks_by(info='answer')
+        assert len(res) == 1
+        assert res[0].info == 'answer', res[0]
+
+    def test_handle_info_json(self):
+        """Test handle info in JSON works."""
+        TaskFactory.create(info={'foo': 'bar'})
+        info = 'foo::bar'
+        res = self.task_repo.filter_tasks_by(info=info)
+        assert len(res) == 1
+        assert res[0].info['foo'] == 'bar', res[0]
+
+    def test_handle_info_json_fulltextsearch(self):
+        """Test handle info fulltextsearch in JSON works."""
+        text = 'bar word agent something'
+        TaskFactory.create(info={'foo': text})
+        info = 'foo::agent'
+        res = self.task_repo.filter_tasks_by(info=info, fulltextsearch='1')
+        assert len(res) == 1
+        assert res[0].info['foo'] == text, res[0]
+
+        res = self.task_repo.filter_tasks_by(info=info)
+        assert len(res) == 0, len(res)
+
+
+    def test_handle_info_json_multiple_keys(self):
+        """Test handle info in JSON with multiple keys works."""
+        TaskFactory.create(info={'foo': 'bar', 'bar': 'foo'})
+        info = 'foo::bar|bar::foo'
+        res = self.task_repo.filter_tasks_by(info=info)
+        assert len(res) == 1
+        assert res[0].info['foo'] == 'bar', res[0]
+        assert res[0].info['bar'] == 'foo', res[0]
+
+    def test_handle_info_json_multiple_keys_fulltextsearch(self):
+        """Test handle info in JSON with multiple keys works."""
+        text = "two three four five"
+        TaskFactory.create(info={'foo': 'bar', 'extra': text})
+        info = 'foo::bar|extra::four'
+        res = self.task_repo.filter_tasks_by(info=info, fulltextsearch='1')
+        assert len(res) == 1, len(res)
+        assert res[0].info['foo'] == 'bar', res[0]
+        assert res[0].info['extra'] == text, res[0]
+
+        res = self.task_repo.filter_tasks_by(info=info)
+        assert len(res) == 0, len(res)
+
+    def test_handle_info_json_multiple_keys_and_fulltextsearch(self):
+        """Test handle info in JSON with multiple keys and AND operator works."""
+        text = "agent myself you bar"
+        TaskFactory.create(info={'foo': 'bar', 'bar': text})
+
+        info = 'foo::bar|bar::you&agent'
+        res = self.task_repo.filter_tasks_by(info=info, fulltextsearch='1')
+        assert len(res) == 1, len(res)
+        assert res[0].info['foo'] == 'bar', res[0]
+        assert res[0].info['bar'] == text, res[0]
+
+
+    def test_handle_info_json_multiple_keys_404(self):
+        """Test handle info in JSON with multiple keys not found works."""
+        TaskFactory.create(info={'foo': 'bar', 'daniel': 'foo'})
+        info = 'foo::bar|bar::foo'
+        res = self.task_repo.filter_tasks_by(info=info)
+        assert len(res) == 0
+
+    def test_handle_info_json_multiple_keys_404_with_one_pipe(self):
+        """Test handle info in JSON with multiple keys not found works."""
+        TaskFactory.create(info={'foo': 'bar', 'bar': 'foo'})
+        info = 'foo::bar|'
+        res = self.task_repo.filter_tasks_by(info=info)
+        assert len(res) == 1
+        assert res[0].info['foo'] == 'bar', res[0]
+        assert res[0].info['bar'] == 'foo', res[0]
+
+    def test_handle_info_json_multiple_keys_404_fulltextsearch(self):
+        """Test handle info in JSON with full text
+        search with multiple keys not found works."""
+        TaskFactory.create(info={'foo': 'bar', 'bar': 'foo'})
+        info = 'foo::bar|'
+        res = self.task_repo.filter_tasks_by(info=info, fulltextsearch='1')
+        assert len(res) == 1
+        assert res[0].info['foo'] == 'bar', res[0]
+        assert res[0].info['bar'] == 'foo', res[0]
+
+
+    def test_handle_info_json_wrong_data(self):
+        """Test handle info in JSON with wrong data works."""
+        TaskFactory.create(info={'foo': 'bar', 'bar': 'foo'})
+
+        infos = ['|', '||', '|::', ':|', '::|', '|:', 'foo|', 'foo|']
+        for info in infos:
+            res = self.task_repo.filter_tasks_by(info=info)
+            assert len(res) == 0
+
+        for info in infos:
+            res = self.task_repo.filter_tasks_by(info=info, fulltextsearch='1')
+            assert len(res) == 0
 
     def test_get_task_return_none_if_no_task(self):
         """Test get_task method returns None if there is no task with the
@@ -164,8 +269,7 @@ class TestTaskRepositoryForTaskQueries(Test):
         TaskFactory.create(state='done', n_answers=17)
         task = TaskFactory.create(state='done', n_answers=99)
 
-        count = self.task_repo.count_tasks_with(state='done',
-                                                         n_answers=99)
+        count = self.task_repo.count_tasks_with(state='done', n_answers=99)
 
         assert count == 1, count
 
@@ -205,6 +309,32 @@ class TestTaskRepositoryForTaskrunQueries(Test):
         retrieved_taskrun = self.task_repo.get_task_run_by(info=taskrun.info)
 
         assert taskrun == retrieved_taskrun, retrieved_taskrun
+
+    def test_get_task_run_by_info_json(self):
+        """Test get_task_run_by with JSON returns a
+        taskrun with the specified attribute"""
+
+        data = {'foo': 'bar'}
+        taskrun = TaskRunFactory.create(info=data)
+
+        info = 'foo::bar'
+        retrieved_taskrun = self.task_repo.get_task_run_by(info=info)
+
+        assert taskrun == retrieved_taskrun, retrieved_taskrun
+
+    def test_get_task_run_by_info_json_fulltext(self):
+        """Test get_task_run_by with JSON and fulltext returns a
+        taskrun with the specified attribute"""
+
+        data = {'foo': 'bar'}
+        taskrun = TaskRunFactory.create(info=data)
+
+        info = 'foo::bar'
+        retrieved_taskrun = self.task_repo.get_task_run_by(info=info,
+                                                           fulltextsearch='1')
+
+        assert taskrun == retrieved_taskrun, retrieved_taskrun
+
 
 
     def test_get_task_run_by_returns_none_if_no_task_run(self):
@@ -255,6 +385,27 @@ class TestTaskRepositoryForTaskrunQueries(Test):
         assert taskrun in retrieved_taskruns, retrieved_taskruns
 
 
+    def test_filter_task_runs_by_multiple_conditions_fulltext(self):
+        """Test filter_task_runs_by supports multiple-condition
+        fulltext queries"""
+
+        text = 'you agent something word'
+        data = {'foo': 'bar', 'bar': text}
+        TaskRunFactory.create(info=data, user_ip='8.8.8.8')
+        taskrun = TaskRunFactory.create(info=data, user_ip='1.1.1.1')
+
+        info = 'foo::bar|bar::agent'
+        retrieved_taskruns = self.task_repo.filter_task_runs_by(info=info,
+                                                                user_ip='1.1.1.1',
+                                                                fulltextsearch='1')
+
+        assert len(retrieved_taskruns) == 1, retrieved_taskruns
+        assert taskrun in retrieved_taskruns, retrieved_taskruns
+
+        retrieved_taskruns = self.task_repo.filter_task_runs_by(info=info,
+                                                                user_ip='1.1.1.1')
+        assert len(retrieved_taskruns) == 0, retrieved_taskruns
+
     def test_filter_task_runs_support_yield_option(self):
         """Test that filter_task_runs_by with the yielded=True option returns
         the results as a generator"""
@@ -270,7 +421,7 @@ class TestTaskRepositoryForTaskrunQueries(Test):
             assert taskrun in task_runs
 
 
-    def test_filter_tasks_limit_offset(self):
+    def test_filter_tasks_runs_limit_offset(self):
         """Test that filter_tasks_by supports limit and offset options"""
 
         TaskRunFactory.create_batch(4)
@@ -453,47 +604,66 @@ class TestTaskRepositorySaveDeleteUpdate(Test):
         assert_raises(WrongObjectError, self.task_repo.delete, bad_object)
 
 
-    def test_delete_all_deletes_many_tasks(self):
-        """Test delete_all deletes many tasks at once"""
+    def test_delete_valid_from_project_deletes_many_tasks(self):
+        """Test delete_valid_from_project deletes many tasks at once"""
 
         tasks = TaskFactory.create_batch(2)
 
-        self.task_repo.delete_all(tasks)
+        project = project_repo.get(tasks[0].project_id)
 
-        for task in tasks:
-            assert self.task_repo.get_task(task.id) is None, task
+        self.task_repo.delete_valid_from_project(project)
+
+        tasks = self.task_repo.filter_tasks_by(project_id=project.id)
+
+        assert len(tasks) == 0, len(tasks)
 
 
-    def test_delete_all_deletes_dependent(self):
-        """Test delete_all deletes dependent taskruns too"""
+    def test_delete_valid_from_project_deletes_dependent(self):
+        """Test delete_valid_from_project deletes dependent taskruns too"""
 
         task = TaskFactory.create()
         taskrun = TaskRunFactory.create(task=task)
+        task_run_id = taskrun.id
+        project = project_repo.get(task.project_id)
 
-        self.task_repo.delete_all([task])
-        deleted = self.task_repo.get_task_run(taskrun.id)
+        self.task_repo.delete_valid_from_project(project)
+        deleted = self.task_repo.get_task_run(id=task_run_id)
 
         assert deleted is None, deleted
 
 
-    def test_delete_all_deletes_many_taskruns(self):
-        """Test delete_all deletes many taskruns at once"""
+    def test_delete_valid_from_project_deletes_dependent_without_result(self):
+        """Test delete_valid_from_project deletes dependent taskruns without result"""
 
-        taskruns = TaskRunFactory.create_batch(2)
+        task = TaskFactory.create(n_answers=1)
+        project = project_repo.get(task.project_id)
+        taskrun = TaskRunFactory.create(task=task)
+        task2 = TaskFactory.create(project=project)
+        TaskRunFactory.create(task=task2)
 
-        self.task_repo.delete_all(taskruns)
+        self.task_repo.delete_valid_from_project(project)
+        non_deleted = self.task_repo.filter_tasks_by(project_id=project.id)
 
-        for taskrun in taskruns:
-            assert self.task_repo.get_task_run(taskrun.id) is None, taskrun
+        err_msg = "There should be one task, as it belongs to a result"
+        assert len(non_deleted) == 1, err_msg
+        assert non_deleted[0].id == task.id, err_msg
+
+        non_deleted = self.task_repo.filter_task_runs_by(project_id=project.id)
+
+        err_msg = "There should be one task_run, as it belongs to a result"
+        assert len(non_deleted) == 1, err_msg
+        assert non_deleted[0].id == taskrun.id, err_msg
 
 
-    def test_delete_all_raises_error_if_no_task(self):
-        """Test delete_all raises a WrongObjectError if is requested to delete
-        any other object than a task"""
+    def test_delete_taskruns_from_project_deletes_taskruns(self):
+        task = TaskFactory.create()
+        project = project_repo.get(task.project_id)
+        taskrun = TaskRunFactory.create(task=task)
 
-        bad_objects = [dict(), 'string']
+        self.task_repo.delete_taskruns_from_project(project)
+        taskruns = self.task_repo.filter_task_runs_by(project_id=project.id)
 
-        assert_raises(WrongObjectError, self.task_repo.delete_all, bad_objects)
+        assert taskruns == [], taskruns
 
 
     def test_update_tasks_redundancy_changes_all_project_tasks_redundancy(self):

@@ -1,7 +1,7 @@
 # -*- coding: utf8 -*-
 # This file is part of PyBossa.
 #
-# Copyright (C) 2013 SF Isle of Man Limited
+# Copyright (C) 2015 SciFabric LTD.
 #
 # PyBossa is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as published by
@@ -31,9 +31,9 @@ class Helper(Test):
     def html_title(self, title=None):
         """Helper function to create an HTML title"""
         if title is None:
-            return "<title>PyBossa</title>"
+            return "<title>PyBossa - PyBossa by Scifabric</title>"
         else:
-            return "<title>PyBossa &middot; %s</title>" % title
+            return "<title>PyBossa &middot; %s - PyBossa by Scifabric</title>" % title
 
     @patch('pybossa.view.account.signer')
     def register(self, mock, fullname="John Doe", name="johndoe",
@@ -126,7 +126,7 @@ class Helper(Test):
 
     def delete_task_runs(self, project_id=1):
         """Deletes all TaskRuns for a given project_id"""
-        db.session.query(TaskRun).filter_by(project_id=1).delete()
+        db.session.query(TaskRun).filter_by(project_id=project_id).delete()
         db.session.commit()
 
     def task_settings_scheduler(self, method="POST", short_name='sampleapp',
@@ -175,45 +175,30 @@ class Helper(Test):
     def update_project(self, method="POST", short_name="sampleapp", id=1,
                            new_name="Sample Project", new_short_name="sampleapp",
                            new_description="Description",
-                           new_allow_anonymous_contributors="False",
+                           new_allow_anonymous_contributors='false',
                            new_category_id="1",
                            new_long_description="Long desc",
                            new_sched="random",
-                           new_hidden=False,
                            new_webhook='http://server.com',
+                           new_protect='false',
                            new_password=''):
         """Helper function to update a project"""
         if method == "POST":
-            if new_hidden:
-                return self.app.post("/project/%s/update" % short_name,
-                                     data={
-                                         'id': id,
-                                         'name': new_name,
-                                         'short_name': new_short_name,
-                                         'description': new_description,
-                                         'allow_anonymous_contributors': new_allow_anonymous_contributors,
-                                         'category_id': new_category_id,
-                                         'long_description': new_long_description,
-                                         'sched': new_sched,
-                                         'hidden': new_hidden,
-                                         'webhook': new_webhook,
-                                         'password': new_password,
-                                         'btn': 'Save'},
-                                     follow_redirects=True)
-            else:
-                return self.app.post("/project/%s/update" % short_name,
-                                     data={'id': id, 'name': new_name,
-                                           'short_name': new_short_name,
-                                           'allow_anonymous_contributors': new_allow_anonymous_contributors,
-                                           'category_id': new_category_id,
-                                           'long_description': new_long_description,
-                                           'sched': new_sched,
-                                           'description': new_description,
-                                           'password': new_password,
-                                           'webhook': new_webhook,
-                                           'btn': 'Save'
-                                           },
-                                     follow_redirects=True)
+            return self.app.post("/project/%s/update" % short_name,
+                                 data={
+                                    'id': id,
+                                    'name': new_name,
+                                    'short_name': new_short_name,
+                                    'description': new_description,
+                                    'allow_anonymous_contributors': new_allow_anonymous_contributors,
+                                    'category_id': new_category_id,
+                                    'long_description': new_long_description,
+                                    'sched': new_sched,
+                                    'webhook': new_webhook,
+                                    'protect': new_protect,
+                                    'password': new_password,
+                                    'btn': 'Save'},
+                                 follow_redirects=True)
         else:
             return self.app.get("/project/%s/update" % short_name,
                                 follow_redirects=True)

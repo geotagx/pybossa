@@ -305,11 +305,11 @@ def resize_avatars():
             try:
                 if u.info.get('container'):
                     cont = cf.get_container(u.info['container'])
-                    if cont.cdn_uri:
-                    	avatar_url = "%s/%s" % (cont.cdn_uri, u.info['avatar'])
+                    if cont.cdn_ssl_uri:
+                    	avatar_url = "%s/%s" % (cont.cdn_ssl_uri, u.info['avatar'])
                     else:
                         cont.make_public()
-                        avatar_url = "%s/%s" % (cont.cdn_uri, u.info['avatar'])
+                        avatar_url = "%s/%s" % (cont.cdn_ssl_uri, u.info['avatar'])
                     r = requests.get(avatar_url, stream=True)
                     if r.status_code == 200:
                         print "Downloading avatar for %s ..." % u.name
@@ -399,7 +399,7 @@ def resize_project_avatars():
             try:
                 if a.info.get('container'):
                    cont = cf.get_container(a.info['container'])
-                   avatar_url = "%s/%s" % (cont.cdn_uri, a.info['thumbnail'])
+                   avatar_url = "%s/%s" % (cont.cdn_ssl_uri, a.info['thumbnail'])
                    r = requests.get(avatar_url, stream=True)
                    if r.status_code == 200:
                        print "Downloading avatar for %s ..." % a.short_name
@@ -481,7 +481,90 @@ def resize_project_avatars():
         #                print "Something failed, this project will use the placehoder."
 
 
+def password_protect_hidden_projects():
+    import random
+    from pybossa.core import project_repo, user_repo, mail
+    from pybossa.jobs import enqueue_job, send_mail
 
+
+    def generate_random_password():
+        CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
+        password = ''
+        for i in range(8):
+            password += random.choice(CHARS)
+        return password
+
+    def generate_email_for(project_name, owner_name, password):
+        subject = "Changes in your hidden project %s" % project_name
+        content = (
+"""
+Dear %s,
+
+We are writing you to let you know that, due to recent changes in Crowdcrafting,
+hidden projects will soon no longer be supported. However, you can still
+protect your project with a password, allowing only people with it to
+access and contribute to it.
+
+We have checked that your project %s is hidden. We don't want to expose it
+to the public, so we have protected it with a password instead. The current
+password for your project is:
+
+%s
+
+You will be able to change it on your project settings page.
+
+You can find more information about passwords in the documentation
+(http://docs.pybossa.com/en/latest/user/tutorial.html#protecting-the-project-with-a-password).
+
+If you have any doubts, please contact us and we will be pleased to help you!
+
+Best regards,
+
+Crowdcrafting team.
+""" % (owner_name, project_name, password))
+
+        return subject, content
+
+
+    with app.app_context():
+        for project in project_repo.filter_by(hidden=1):
+            password = generate_random_password()
+            subject, content = generate_email_for(project.name, project.owner.name, password)
+            message = dict(recipients=[project.owner.email_addr],
+                           subject=subject,
+                           body=content)
+            job = dict(name=send_mail,
+                       args=[message],
+                       kwargs={},
+                       timeout=(600),
+                       queue='medium')
+            enqueue_job(job)
+            project.set_password(password)
+            project_repo.save(project)
+
+
+def create_results():
+    """Create results when migrating."""
+    from pybossa.core import project_repo, task_repo, result_repo
+    from pybossa.model.result import Result
+
+    projects = project_repo.filter_by(published=True)
+
+    for project in projects:
+        print "Working on project: %s" % project.short_name
+        tasks = task_repo.filter_tasks_by(state='completed',
+                                          project_id=project.id)
+        print "Analyzing %s tasks" % len(tasks)
+        for task in tasks:
+            result = result_repo.get_by(project_id=project.id, task_id=task.id)
+            if result is None:
+                result = Result(project_id=project.id,
+                                task_id=task.id,
+                                task_run_ids=[tr.id for tr in task.task_runs],
+                                last_version=True)
+                db.session.add(result)
+        db.session.commit()
+        print "Project %s completed!" % project.short_name
 
 ## ==================================================
 ## Misc stuff for setting up a command line interface

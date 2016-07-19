@@ -1,7 +1,7 @@
 # -*- coding: utf8 -*-
 # This file is part of PyBossa.
 #
-# Copyright (C) 2013 SF Isle of Man Limited
+# Copyright (C) 2015 SciFabric LTD.
 #
 # PyBossa is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as published by
@@ -19,11 +19,11 @@
 from sqlalchemy import Integer, Boolean, Unicode, Float, UnicodeText, Text
 from sqlalchemy.schema import Column, ForeignKey
 from sqlalchemy.orm import relationship, backref
-from sqlalchemy import event
-
+from sqlalchemy.dialects.postgresql import JSON
+from sqlalchemy.ext.mutable import MutableDict
 
 from pybossa.core import db, signer
-from pybossa.model import DomainObject, JSONType, JSONEncodedDict, make_timestamp, update_redis
+from pybossa.model import DomainObject, make_timestamp
 from pybossa.model.task import Task
 from pybossa.model.task_run import TaskRun
 from pybossa.model.category import Category
@@ -54,25 +54,18 @@ class Project(db.Model, DomainObject):
     webhook = Column(Text)
     #: If the project allows anonymous contributions
     allow_anonymous_contributors = Column(Boolean, default=True)
-    long_tasks = Column(Integer, default=0)
-    #: If the project is hidden
-    hidden = Column(Integer, default=0)
+    #: If the project is published
+    published = Column(Boolean, nullable=False, default=False)
     # If the project is featured
     featured = Column(Boolean, nullable=False, default=False)
-    # If the project is completed
-    completed = Column(Boolean, nullable=False, default=False)
     # If the project owner has been emailed
     contacted = Column(Boolean, nullable=False, default=False)
     #: Project owner_id
     owner_id = Column(Integer, ForeignKey('user.id'), nullable=False)
-    time_estimate = Column(Integer, default=0)
-    time_limit = Column(Integer, default=0)
-    calibration_frac = Column(Float, default=0)
-    bolt_course_id = Column(Integer, default=0)
     #: Project Category
     category_id = Column(Integer, ForeignKey('category.id'), nullable=False)
     #: Project info field formatted as JSON
-    info = Column(JSONEncodedDict, default=dict)
+    info = Column(MutableDict.as_mutable(JSON), default=dict())
 
     tasks = relationship(Task, cascade='all, delete, delete-orphan', backref='project')
     task_runs = relationship(TaskRun, backref='project',
@@ -116,23 +109,5 @@ class Project(db.Model, DomainObject):
     def delete_autoimporter(self):
         del self.info['autoimporter']
 
-
-@event.listens_for(Project, 'before_update')
-@event.listens_for(Project, 'before_insert')
-def empty_string_to_none(mapper, conn, target):
-    if target.name == '':
-        target.name = None
-    if target.short_name == '':
-        target.short_name = None
-    if target.description == '':
-        target.description = None
-
-
-@event.listens_for(Project, 'after_insert')
-def add_event(mapper, conn, target):
-    """Update PyBossa feed with new project."""
-    obj = dict(id=target.id,
-               name=target.name,
-               short_name=target.short_name,
-               action_updated='Project')
-    update_redis(obj)
+    def has_presenter(self):
+        return self.info.get('task_presenter') not in ('', None)

@@ -1,7 +1,7 @@
 # -*- coding: utf8 -*-
 # This file is part of PyBossa.
 #
-# Copyright (C) 2013 SF Isle of Man Limited
+# Copyright (C) 2015 SciFabric LTD.
 #
 # PyBossa is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as published by
@@ -44,7 +44,15 @@ class TestApiCommon(TestAPI):
         data = json.loads(res.data)
         assert len(data) == 10, len(data)
 
+        # DEPRECATED
         res = self.app.get('/api/project?limit=10&offset=10')
+        data = json.loads(res.data)
+        assert len(data) == 10, len(data)
+        assert data[0].get('name') == projects[10].name, data[0]
+
+        # Keyset pagination
+        url = '/api/project?limit=10&last_id=%s' % projects[9].id
+        res = self.app.get(url)
         data = json.loads(res.data)
         assert len(data) == 10, len(data)
         assert data[0].get('name') == projects[10].name, data[0]
@@ -65,25 +73,29 @@ class TestApiCommon(TestAPI):
 
         res = self.app.get('/api/user?limit=10')
         data = json.loads(res.data)
-        print data
         assert len(data) == 10, len(data)
 
+        # DEPRECATED
         res = self.app.get('/api/user?limit=10&offset=10')
         data = json.loads(res.data)
         assert len(data) == 10, len(data)
         assert data[0].get('name') == 'user11', data
 
+        res = self.app.get('/api/user?limit=10&last_id=10')
+        data = json.loads(res.data)
+        assert len(data) == 10, len(data)
+        assert data[0].get('name') == 'user11', data
 
     @with_context
-    def test_get_query_with_api_key(self):
-        """ Test API GET query with an API-KEY"""
+    def test_get_query_with_api_key_and_all(self):
+        """ Test API GET query with an API-KEY requesting all results"""
         users = UserFactory.create_batch(3)
         project = ProjectFactory.create(owner=users[0], info={'total': 150})
         task = TaskFactory.create(project=project, info={'url': 'my url'})
         taskrun = TaskRunFactory.create(task=task, user=users[0],
                                         info={'answer': 'annakarenina'})
         for endpoint in self.endpoints:
-            url = '/api/' + endpoint + '?api_key=' + users[1].api_key
+            url = '/api/' + endpoint + '?api_key=' + users[1].api_key + '&all=1'
             res = self.app.get(url)
             data = json.loads(res.data)
 
@@ -109,6 +121,66 @@ class TestApiCommon(TestAPI):
                 assert len(data) == 3, data
                 user = data[0]
                 assert user['name'] == 'user1', data
+                assert res.mimetype == 'application/json', res
+
+    @with_context
+    def test_get_query_with_api_key_context(self):
+        """ Test API GET query with an API-KEY requesting only APIKEY results."""
+        users = UserFactory.create_batch(4)
+        project_oc = ProjectFactory.create(owner=users[0], info={'total': 150})
+        projects = ProjectFactory.create_batch(3, owner=users[1])
+        task_oc = TaskFactory.create(project=project_oc, info={'url': 'my url'})
+        taskrun_oc = TaskRunFactory.create(task=task_oc, user=users[0],
+                                        info={'answer': 'annakarenina'})
+        for p in projects:
+            print p.owner_id
+            task_tmp = TaskFactory.create(project=p)
+            TaskRunFactory.create(task=task_tmp)
+
+        # For project owner with associated data
+        for endpoint in self.endpoints:
+            url = '/api/' + endpoint + '?api_key=' + users[0].api_key
+            res = self.app.get(url)
+            data = json.loads(res.data)
+
+            if endpoint == 'project':
+                assert len(data) == 1, data
+                project = data[0]
+                assert project['owner_id'] == users[0].id, project['owner_id']
+                assert project['info']['total'] == 150, data
+                assert res.mimetype == 'application/json', res
+
+            if endpoint == 'task':
+                assert len(data) == 1, data
+                task = data[0]
+                assert task['project_id'] == project_oc.id, task
+                assert task['info']['url'] == 'my url', data
+                assert res.mimetype == 'application/json', res
+
+            if endpoint == 'taskrun':
+                assert len(data) == 1, data
+                taskrun = data[0]
+                assert taskrun['project_id'] == project_oc.id, taskrun
+                assert taskrun['info']['answer'] == 'annakarenina', data
+                assert res.mimetype == 'application/json', res
+
+        # For authenticated with non-associated data
+        for endpoint in self.endpoints:
+            url = '/api/' + endpoint + '?api_key=' + users[3].api_key
+
+            res = self.app.get(url)
+            data = json.loads(res.data)
+
+            if endpoint == 'project':
+                assert len(data) == 0, data
+                assert res.mimetype == 'application/json', res
+
+            if endpoint == 'task':
+                assert len(data) == 0, data
+                assert res.mimetype == 'application/json', res
+
+            if endpoint == 'taskrun':
+                assert len(data) == 0, data
                 assert res.mimetype == 'application/json', res
 
 

@@ -126,6 +126,56 @@ name of the file.
 
 .. _LOGO: https://github.com/PyBossa/pybossa/blob/master/settings_local.py.tmpl#L40
 
+Multiple languages
+==================
+
+By default PyBossa only speaks English, however the default theme comes with a few
+translations (Spanish, French, Italian, Japanese, Greek and German). 
+
+You can enable those translations (mostly user interface strings and actions) by doing
+the following: creating a symlink to the translations folders:
+
+.. code-block:: bash
+
+    $ cd pybossa && ln -s themes/default/translations
+
+This will use the default translations of PyBossa for your server. We recommend to use
+these translations with the default theme. If you use your own theme, the best thing is
+to do your own translation, (see :ref:`translating`), as you might want to name things 
+differently on the templates.
+
+You can disable/enable different languages in your config file
+**settings_local.py**. For example, to remove French you can add
+this configuration to the settings file:
+
+.. code-block:: python 
+
+    LOCALES = [('en', 'English'), ('es', u'Español'),
+               ('it', 'Italiano'), ('ja', u'日本語')]
+
+
+Also, you can always specify a different default locale using the following
+snippet in the same settings file
+
+
+.. code-block:: python 
+
+    DEFAULT_LOCALE = 'es'
+
+
+.. note::
+    PyBossa tries to first match the user preferred language from their
+    browser. This will work for anonymous users, while registered ones can
+    specify the language they want using their user preferences. 
+
+
+.. note::
+    As an alternative way to allow anonymous users to *force* a different
+    language, PyBossa looks for a cookie named **language** where it expects
+    the key of any of the supported langes in the LOCALES list. You can use
+    JavaScript to set it up.
+    
+
 Creating your own theme
 =======================
 
@@ -181,6 +231,39 @@ server without problems.
 
 .. _`repository pybossa-default-theme`: https://github.com/PyBossa/pybossa-default-theme
 
+Using SASS and minifying JavaScript
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+PyBossa supports SASS thanks to Flask-Assets. If you want to compile SASS or SCSS just
+add to your theme static folder a new one named: sass. Then, you can request the compiled
+version from the templates like this:
+
+.. code-block:: html
+
+    {% assets filters="libsass", output="css/gen/yourcss.min.css",
+              "sass/yourcss.scss"%}
+        <link rel="stylesheet" type="text/css" href="{{ ASSET_URL }}">
+    {% endassets %}
+
+The same can be done for Javascript using the filter minjs:
+
+.. code-block:: html
+
+    {% assets filters="jsmin", output="gen/packed.js",
+              "common/jquery.js", "site/base.js", "site/widgets.js" %}
+        <script type="text/javascript" src="{{ ASSET_URL }}"></script>
+    {% endassets %}
+
+Results page
+=============
+
+PyBossa allows you to present a results page for your server. Add a file named
+_results.html to the home directory in the templates folder and you'll be able
+to show results about your project from one place:
+
+    http://server/results
+
+
 Adding your Contact Information
 ===============================
 
@@ -203,6 +286,7 @@ use.
 .. _TERMSOFUSE: https://github.com/PyBossa/pybossa/blob/master/settings_local.py.tmpl#L43
 .. _DATEUSE: https://github.com/PyBossa/pybossa/blob/master/settings_local.py.tmpl#L44
 
+.. _ssnn:
 
 Enabling Twitter, Facebook and Google authentication
 ====================================================
@@ -221,6 +305,8 @@ them.
 .. _Twitter: https://dev.twitter.com/
 .. _`TWITTER_CONSUMER_KEY`: https://github.com/PyBossa/pybossa/blob/master/settings_local.py.tmpl#L52
 .. _`TWITTER_CONSUMER_SECRET`: https://github.com/PyBossa/pybossa/blob/master/settings_local.py.tmpl#L53
+.. note::
+    This will also enable the Twitter task importer.
 
 Facebook
 ~~~~~~~~
@@ -232,7 +318,6 @@ variables: `FACEBOOK_APP_ID`_ and `FACEBOOK_APP_SECRET`_ and uncomment them.
 .. _Facebook: https://developers.facebook.com/apps
 .. _`FACEBOOK_APP_ID`: https://github.com/PyBossa/pybossa/blob/master/settings_local.py.tmpl#L54
 .. _`FACEBOOK_APP_SECRET`: https://github.com/PyBossa/pybossa/blob/master/settings_local.py.tmpl#L55
-
 
 Google
 ~~~~~~
@@ -299,7 +384,6 @@ type of users:
 .. code-block:: python
 
     ANNOUNCEMENT = {'root': 'Your secret message'}
-
 
 There is an example of the **ANNOUNCEMENT** variable in the
 `settings_local.py.tmpl <https://github.com/PyBossa/pybossa/blob/master/settings_local.py.tmpl>`_
@@ -663,6 +747,17 @@ with this configuration parameter::
 
     ACCOUNT_CONFIRMATION_DISABLED = True
 
+Sending weekly email stats to project owners
+============================================
+
+Project owners that have the pro flag set to True can receive every week an
+update with the latest statistics about their projects in their email box.
+
+By default this email is sent every Sunday. You can modify it in the settings
+file by changing it to another day:
+
+WEEKLY_UPDATE_STATS = 'Tuesday'
+
 Newsletters with Mailchimp
 ==========================
 
@@ -685,7 +780,7 @@ interested users.
 Enabling the Flickr Task importer
 =================================
 
-PyBossa has five different types of built-in importers. Users can use them to
+PyBossa has several different types of built-in importers. Users can use them to
 import tasks for their projects directly from the Web interface. However, using
 the Flickr one requires an API key and shared secret from Flickr in order to
 communicate with the service.
@@ -701,12 +796,88 @@ refer to `here <https://www.flickr.com/services/api/>`_.
 Enabling the Dropbox Task importer
 ==================================
 
-In addition to the Flickr importer, PyBossa also offers the Dropbox importer, which
-allows to import directly all kind of files from a Dropbox account. In order to
-use it, you'll need to register your PyBossa server as a Dropbox app, as explained
+PyBossa also offers the Dropbox importer, which allows to import directly all
+kind of files from a Dropbox account. In order to use it, you'll need to
+register your PyBossa server as a Dropbox app, as explained
 `here <https://www.dropbox.com/developers/dropins/chooser/js#setup>`_.
 
 Don't worry about the Javascript snippet part, we've already handled that for you.
 Instead, get the App key you will be given and add it to your settings_local.py::
 
     DROPBOX_APP_KEY = 'your-key'
+
+Enabling the Twitter Task importer
+==================================
+
+If you already have enabled the Twitter authentication, then the Twitter task
+importer will be enabled too. Otherwise, you will need to create an application
+in Twitter_ and copy and paste the **Consumer key and secret** into the next
+variables: `TWITTER_CONSUMER_KEY`_ and `TWITTER_CONSUMER_SECRET`_ and uncomment
+them.
+
+.. _Twitter: https://dev.twitter.com/
+.. note::
+    This will also enable PyBossa's Twitter login.
+
+Enabling the Youtube Task importer
+==================================
+
+The Youtube task importer needs a Youtube server key which you need to create in the `Google API Console <https://console.developers.google.com/>`_ in YouTube Data API.
+
+Once you have an API key, you'll have to add it to your settings_local.py file::
+
+    YOUTUBE_API_SERVER_KEY = "your-key"
+
+For more information on how to get a Youtube server key, please
+refer to `here <https://developers.google.com/youtube/registering_an_application#Create_API_Keys>`_.
+
+Enabling Server Sent Events
+===========================
+
+Since PyBossa v1.1.0, PyBossa supports Server Sent Events (SSE) in some views. This feature
+is really powerfull, however it brings some issues with it: it need to run PyBossa in
+asynchronous mode.
+
+As this is not a necessity, by default PyBossa has this feature disabled. PyBossa uses
+SSE to notify users about specific actions (i.e. the result of a webhook in real time).
+
+If you want to enable it, you will have to add to your settings_local.py::
+
+    SSE = True
+
+Also, you will need to configure uwsgi and nginx to support SSE events. This is not 
+trivial, as there are several different scenarios, libraries and options, so instead of
+recommending one solution, we invite you to read the `uwsgi documentation about it <http://uwsgi-docs.readthedocs.org/en/latest/Async.html>`_, so you can take a decission based on your
+own infrastructure and preferences.
+
+Latest news from PyBossa
+========================
+
+Since version v1.2.1 PyBossa gets the latest news of its new releases, as well
+as anything related to what it's produced by SciFabric regarding the crowdsourcing
+world. You can add more items if you want, by just adding to your settings_local.py
+file new ATOM URLs::
+
+    NEWS_URL = ['http:/http:///atomurl1', 'http://atomurl2', ...]
+
+Enabling pro user features
+==========================
+
+Since version v1.2.2 PyBossa allows making available to all the users certain
+features that were before reserved to pro users.
+
+Just locate them in the settings_local.py file. By default, they look like::
+
+    PRO_FEATURES = {
+        'auditlog':              True,
+        'webhooks':              True,
+        'updated_exports':       True,
+        'notify_blog_updates':   True,
+        'project_weekly_report': True,
+        'autoimporter':          True,
+        'better_stats':          True
+    }
+
+By choosing "True" on each of them, you are making that specific feature available
+only to pro users. On the other hand, selecting "False" makes them available
+to regular users as well.

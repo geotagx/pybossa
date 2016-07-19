@@ -19,6 +19,7 @@ _gcs_form.html
 dat/GeoLiteCity.dat
 .ropeproject/
 .idea/
+*.sublime-*
 .vagrant/
 vagrant_env/
 keys/*
@@ -29,8 +30,12 @@ keys/*
 *.log
 log
 *.sql
-
+dat/GeoIP.dat
+*.ini
+pybossa/themes/pybossa-default-theme/
+dist/*
 pybossa/themes/crowdcrafting-theme/
+pybossa/translations
 pybossa/plugins/
 !pybossa/plugins/__init__.py
 test/test_cache.py
