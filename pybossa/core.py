@@ -255,7 +255,6 @@ def setup_babel(app):
 def setup_blueprints(app):
     """Configure blueprints."""
     from pybossa.api import blueprint as api
-    from pybossa.view.geotagx import blueprint as geotagx
     from pybossa.view.account import blueprint as account
     from pybossa.view.projects import blueprint as projects
     from pybossa.view.admin import blueprint as admin
@@ -268,7 +267,6 @@ def setup_blueprints(app):
 
     blueprints = [{'handler': home, 'url_prefix': '/'},
                   {'handler': api,  'url_prefix': '/api'},
-                  {'handler': geotagx,  'url_prefix': '/geotagx'},
                   {'handler': account, 'url_prefix': '/account'},
                   {'handler': projects, 'url_prefix': '/project'},
                   {'handler': admin, 'url_prefix': '/admin'},
